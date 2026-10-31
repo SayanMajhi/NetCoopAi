@@ -1,0 +1,18 @@
+:root {
+  color: #1f2328;
+  background: #ffffff;
+}
+
+body {
+  margin: 0;
+}
+
+table {
+  border-collapse: collapse;
+}
+
+th,
+td {
+  border-bottom: 1px solid #d0d7de;
+  text-align: left;
+}
