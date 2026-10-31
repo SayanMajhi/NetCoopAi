@@ -1,0 +1,178 @@
+version: "1.0"
+
+window:
+  minutes: 5
+  congestion_min_consecutive_samples: 3
+  sparse_samples_reduce_coverage: true
+
+rssi:
+  grey_zone_dbm:
+    lower_exclusive: -75
+    upper_exclusive: -67
+
+thresholds:
+  latency_ms: {warn: null, critical: null, direction: high, rationale: "Elevated delay may support congestion or path faults."}
+  jitter_ms: {warn: null, critical: null, direction: high, rationale: "Variable delay supports performance degradation."}
+  packet_loss_pct: {warn: null, critical: null, direction: high, rationale: "Loss supports a network fault when scope and timing agree."}
+  link_utilization_pct: {warn: null, critical: null, direction: high, rationale: "Sustained high utilization is required for congestion."}
+  throughput_mbps: {warn: null, critical: null, direction: low_relative_to_capacity, rationale: "Compare throughput with capacity and baseline."}
+  capacity_mbps: {warn: null, critical: null, direction: context, rationale: "Capacity is used to interpret throughput and utilization."}
+  cpu_pct: {warn: null, critical: null, direction: high, rationale: "High device CPU may support overload."}
+  memory_pct: {warn: null, critical: null, direction: high, rationale: "High device memory may support overload."}
+  queue_drops: {warn: null, critical: null, direction: rising_delta, rationale: "Compare counter deltas over time; one raw count is insufficient."}
+  interface_errors: {warn: null, critical: null, direction: rising_delta, rationale: "Compare counter deltas over time; flag counter resets."}
+  link_flap_count: {warn: null, critical: null, direction: rising_delta, rationale: "Increasing flaps may support an interface fault."}
+  rssi_dbm: {warn: null, critical: null, direction: low, rationale: "Weak or grey-zone signal needs retry evidence."}
+  retry_rate_pct: {warn: null, critical: null, direction: high, rationale: "Elevated retries corroborate weak Wi-Fi."}
+
+signatures:
+  link_congestion:
+    required:
+      - {metric: link_utilization_pct, check: sustained_above_critical}
+    corroborating:
+      min_matches: 1
+      checks:
+        - {metric: queue_drops, check: rising_delta}
+        - {metric: latency_ms, check: above_warn}
+    contradicting:
+      - {metric: link_utilization_pct, check: below_warn}
+
+  weak_wifi:
+    required:
+      - {metric: rssi_dbm, check: weak_or_grey_zone}
+      - {metric: retry_rate_pct, check: above_warn}
+      - {metric: packet_loss_pct, scope: ap_uplink, check: below_warn}
+    corroborating:
+      min_matches: 0
+      checks:
+        - {metric: packet_loss_pct, check: above_warn}
+    contradicting:
+      - {metric: packet_loss_pct, scope: ap_uplink, check: above_warn}
+      - {metric: link_utilization_pct, scope: ap_uplink, check: sustained_above_critical}
+
+  interface_fault:
+    required:
+      - any_of:
+          - {metric: interface_errors, check: rising_delta}
+          - {metric: link_flap_count, check: rising_delta}
+      - {metric: packet_loss_pct, scope: downstream, check: above_warn}
+    corroborating:
+      min_matches: 0
+      checks:
+        - {metric: interface_oper_status, check: down_or_flapping}
+    contradicting:
+      - {metric: packet_loss_pct, scope: downstream, check: below_warn}
+
+  dns_failure:
+    required:
+      - {metric: dns_success, check: failed}
+      - {metric: reachability, scope: dns_server, check: reachable}
+    corroborating:
+      min_matches: 0
+      checks:
+        - {metric: dns_success, scope: multiple_clients, check: failed}
+    contradicting:
+      - {metric: reachability, scope: dns_server, check: unreachable}
+
+  dhcp_failure:
+    required:
+      - {metric: dhcp_success, check: failed}
+      - {metric: reachability, scope: dhcp_server, check: reachable}
+    corroborating:
+      min_matches: 0
+      checks:
+        - {metric: dhcp_success, scope: multiple_clients, check: failed}
+    contradicting:
+      - {metric: reachability, scope: dhcp_server, check: unreachable}
+
+  hardware_failure:
+    required:
+      - any_of:
+          - {metric: interface_oper_status, check: down_or_flapping}
+          - {metric: reachability, check: unreachable}
+    corroborating:
+      min_matches: 1
+      checks:
+        - {metric: packet_loss_pct, check: above_critical}
+        - {metric: interface_errors, check: rising_delta}
+        - {metric: cpu_pct, check: above_critical}
+    contradicting:
+      - {metric: reachability, check: reachable}
+
+  device_overload:
+    required:
+      - any_of:
+          - {metric: cpu_pct, check: sustained_above_critical}
+          - {metric: memory_pct, check: sustained_above_critical}
+    corroborating:
+      min_matches: 1
+      checks:
+        - {metric: latency_ms, check: above_warn}
+        - {metric: queue_drops, check: rising_delta}
+    contradicting:
+      - {metric: cpu_pct, check: below_warn}
+
+# Frozen vocabulary. Agents, orchestrator, config and tests must use exactly these names.
+# Every `metric` above must be owned by an agent card (netcoop/protocol/cards.py).
+vocabulary:
+  checks:
+    sustained_above_critical: "value above critical for >= window.congestion_min_consecutive_samples samples"
+    above_critical: "latest valid value above critical"
+    above_warn: "latest valid value above warn"
+    below_warn: "latest valid value at or below warn"
+    rising_delta: "positive per-interval counter delta; negative delta is a counter reset, not evidence"
+    weak_or_grey_zone: "rssi_dbm at or below rssi.grey_zone_dbm.upper_exclusive"
+    down_or_flapping: "interface_oper_status down, or link_flap_count rising"
+    failed: "service check reports failure (dns_success / dhcp_success = false)"
+    reachable: "reachability = true"
+    unreachable: "reachability = false"
+  scopes:
+    target: "the device or link named in the hypothesis (default when scope is omitted)"
+    ap_uplink: "the link from the access point to its switch, from topology.json"
+    downstream: "devices behind the target in topology.json"
+    dns_server: "nodes with service dns in topology.json"
+    dhcp_server: "nodes with service dhcp in topology.json"
+    multiple_clients: "the same check observed on >= 2 distinct client devices"
+
+healthy_coverage:
+  require_fresh_performance_measurements: true
+  require_fresh_infrastructure_measurements: true
+  require_relevant_service_checks: true
+  require_relevant_path_checks: true
+  allow_unresolved_major_contradictions: false
+
+confidence:
+  method: heuristic-v1
+  signal_fit_weight: 0.40
+  topology_fit_weight: 0.25
+  time_fit_weight: 0.20
+  independent_source_fit_weight: 0.15
+  contradiction_penalty: 0.15
+  multiply_by_coverage: true
+  deduplicate_by_evidence_id: true
+
+decision_gates:
+  diagnosed:
+    min_confidence: 0.70
+    min_coverage: 0.75
+    min_independent_raw_sources: 2
+    min_lead_over_runner_up: 0.15
+  probable:
+    min_confidence: 0.50
+    require_named_limitation_or_rival: true
+  insufficient_evidence:
+    when_below_probable_gate: true
+    when_major_contradiction_unresolved: true
+
+evaluation_rules:
+  required_list: all_checks_must_pass
+  any_of: at_least_one_check_must_pass
+  corroborating: at_least_min_matches_must_pass
+  scope: same_incident_and_relevant_topology_scope
+  time: checks_must_use_the_configured_window
+  missing_or_stale: unknown_not_false
+  null_threshold: check_unavailable
+  coverage:
+    numerator: fresh_valid_required_checks
+    denominator: applicable_required_checks
+    missing_required_checks_count_in_denominator: true
