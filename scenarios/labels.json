@@ -1,0 +1,74 @@
+{
+  "_note": "Ground truth for scenarios/dev/*. Written before any diagnosis logic exists. NEVER read by runtime code. IDs come from scenarios/topology.json.",
+  "label_version": "1.0",
+  "scenarios": {
+    "normal.json": {
+      "status": "healthy", "cause": null, "affected_ids": [], "expected_errors": [],
+      "why": "All metrics within range and service checks pass"
+    },
+    "false_report.json": {
+      "status": "healthy", "cause": null, "affected_ids": [], "expected_errors": [],
+      "why": "User complains about slow Wi-Fi but every fresh measurement is normal"
+    },
+    "congestion.json": {
+      "status": "diagnosed", "cause": "link_congestion", "affected_ids": ["HOSTEL_UPLINK_01", "SW_CAMPUS_1"], "expected_errors": [],
+      "why": "Uplink utilization sustained >90% with rising queue drops and high latency from two sources"
+    },
+    "weak_wifi.json": {
+      "status": "diagnosed", "cause": "weak_wifi", "affected_ids": ["HOSTEL_AP_01"], "expected_errors": [],
+      "why": "Low RSSI plus high retries while the AP uplink is healthy"
+    },
+    "interface_fault.json": {
+      "status": "diagnosed", "cause": "interface_fault", "affected_ids": ["ACC_LINK_07", "SW_CAMPUS_7"], "expected_errors": [],
+      "why": "Interface errors rising with downstream packet loss and normal utilization"
+    },
+    "dns_failure.json": {
+      "status": "diagnosed", "cause": "dns_failure", "affected_ids": ["SRV_DNS_DHCP_01"], "expected_errors": [],
+      "why": "DNS lookups fail from several clients while IP reachability to the server is fine"
+    },
+    "dhcp_failure.json": {
+      "status": "diagnosed", "cause": "dhcp_failure", "affected_ids": ["SRV_DNS_DHCP_01"], "expected_errors": [],
+      "why": "DHCP leases fail from several clients while the server is reachable"
+    },
+    "ambiguous_congestion_errors.json": {
+      "status": "probable", "cause": "link_congestion", "affected_ids": ["DEPT_UPLINK_01"], "expected_errors": [],
+      "why": "High utilization and rising interface errors at once; a QUERY must weaken one rival and the report keeps interface_fault as the alternative"
+    },
+    "missing_stale.json": {
+      "status": "insufficient_evidence", "cause": null, "affected_ids": [], "expected_errors": [],
+      "why": "Key metrics missing or older than the window; the system must abstain, not guess"
+    },
+    "unit_mismatch.json": {
+      "status": "diagnosed", "cause": "link_congestion", "affected_ids": ["DEPT_UPLINK_01", "SW_CAMPUS_2"], "expected_errors": [],
+      "why": "Latency arrives as rtt_sec and throughput in kbps; after conversion it is congestion"
+    },
+    "counter_reset.json": {
+      "status": "healthy", "cause": null, "affected_ids": [], "expected_errors": [],
+      "why": "Error counter drops to zero (device reboot); the negative delta is a reset, not a fault"
+    },
+    "schema_0_9.json": {
+      "status": "diagnosed", "cause": "interface_fault", "affected_ids": ["HOSTEL_UPLINK_01"], "expected_errors": [],
+      "why": "A finding arrives in the old 0.9 format, is upgraded with a visible record, and still counts"
+    },
+    "unsupported_2_x.json": {
+      "status": "insufficient_evidence", "cause": null, "affected_ids": [], "expected_errors": ["SCHEMA_VERSION_UNSUPPORTED"],
+      "why": "The only fault finding is a 2.0 message; it is rejected with a typed ERROR and the rest is not enough"
+    },
+    "missing_message_field.json": {
+      "status": "insufficient_evidence", "cause": null, "affected_ids": [], "expected_errors": ["MISSING_FIELD"],
+      "why": "A key FINDING has no stance; it is rejected with field_path payload.stance"
+    },
+    "duplicate_message.json": {
+      "status": "diagnosed", "cause": "link_congestion", "affected_ids": ["HOSTEL_UPLINK_01", "SW_CAMPUS_1"], "expected_errors": ["DUPLICATE_MESSAGE"],
+      "why": "The same FINDING is sent twice; the copy is ignored and logged and the diagnosis is unchanged"
+    },
+    "correlation_timeout.json": {
+      "status": "insufficient_evidence", "cause": null, "affected_ids": [], "expected_errors": ["AGENT_TIMEOUT"],
+      "why": "Correlation fails after a retry; the orchestrator reports with limitation correlation_failed"
+    },
+    "malformed_input.json": {
+      "status": "invalid_input", "cause": null, "affected_ids": [], "expected_errors": [],
+      "why": "The telemetry file is not valid JSON; the report has validation_errors and confidence null"
+    }
+  }
+}
