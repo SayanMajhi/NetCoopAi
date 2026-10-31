@@ -20,3 +20,6 @@ reports/*
 # dashboard
 node_modules/
 dashboard/dist/
+
+# local Claude Code settings
+.claude/
