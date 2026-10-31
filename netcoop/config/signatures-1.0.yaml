@@ -11,19 +11,19 @@ rssi:
     upper_exclusive: -67
 
 thresholds:
-  latency_ms: {warn: null, critical: null, direction: high, rationale: "Elevated delay may support congestion or path faults."}
-  jitter_ms: {warn: null, critical: null, direction: high, rationale: "Variable delay supports performance degradation."}
-  packet_loss_pct: {warn: null, critical: null, direction: high, rationale: "Loss supports a network fault when scope and timing agree."}
-  link_utilization_pct: {warn: null, critical: null, direction: high, rationale: "Sustained high utilization is required for congestion."}
-  throughput_mbps: {warn: null, critical: null, direction: low_relative_to_capacity, rationale: "Compare throughput with capacity and baseline."}
-  capacity_mbps: {warn: null, critical: null, direction: context, rationale: "Capacity is used to interpret throughput and utilization."}
-  cpu_pct: {warn: null, critical: null, direction: high, rationale: "High device CPU may support overload."}
-  memory_pct: {warn: null, critical: null, direction: high, rationale: "High device memory may support overload."}
-  queue_drops: {warn: null, critical: null, direction: rising_delta, rationale: "Compare counter deltas over time; one raw count is insufficient."}
-  interface_errors: {warn: null, critical: null, direction: rising_delta, rationale: "Compare counter deltas over time; flag counter resets."}
-  link_flap_count: {warn: null, critical: null, direction: rising_delta, rationale: "Increasing flaps may support an interface fault."}
-  rssi_dbm: {warn: null, critical: null, direction: low, rationale: "Weak or grey-zone signal needs retry evidence."}
-  retry_rate_pct: {warn: null, critical: null, direction: high, rationale: "Elevated retries corroborate weak Wi-Fi."}
+  latency_ms: {warn: 100, critical: 200, direction: high, rationale: "Client-probe RTT heuristic for this campus: above 100 ms merits investigation and above 200 ms is severe; compare with the path baseline and other signals."}
+  jitter_ms: {warn: 20, critical: 50, direction: high, rationale: "20/50 ms delay-variation heuristic for interactive traffic; elevated jitter alone does not identify the fault."}
+  packet_loss_pct: {warn: 1.0, critical: 3.0, direction: high, rationale: "Cisco VoWLAN guidance targets loss below 1%; 3% marks more severe loss in this local heuristic, requiring corroboration and matching scope."}
+  link_utilization_pct: {warn: 80, critical: 90, direction: high, rationale: "Cisco uses 80% as a congestion-monitoring threshold; 90% sustained across samples is the local critical trigger, with delay or drops required to support congestion."}
+  throughput_mbps: {warn: 0.50, critical: 0.25, direction: low_relative_to_capacity, rationale: "These numbers are fractions of link capacity, not Mbps: below 50% or 25% of capacity is a comparison cue only when demand or a baseline is known; low traffic alone is not a fault."}
+  capacity_mbps: {warn: 100, critical: 0, direction: context, rationale: "Topology sanity guardrails for this synthetic campus: below 100 Mbps is unexpected for its 1 Gbps access links; zero or negative capacity is invalid for utilization. Do not use capacity alone as a fault signal."}
+  cpu_pct: {warn: 70, critical: 90, direction: high, rationale: "Sustained 70% merits review; sustained 90% leaves little processing headroom. Require latency or drop evidence before inferring overload."}
+  memory_pct: {warn: 75, critical: 90, direction: high, rationale: "Sustained 75% merits review and 90% is severe for this prototype; memory use alone does not prove overload."}
+  queue_drops: {warn: 1, critical: 100, direction: rising_delta, rationale: "Thresholds apply to positive per-sample counter deltas, never the cumulative counter: any new drop merits review; 100 in one interval is severe. Ignore reset intervals."}
+  interface_errors: {warn: 1, critical: 10, direction: rising_delta, rationale: "Thresholds apply to positive per-sample counter deltas, not raw totals: new errors warrant inspection; 10 in one interval is severe. Ignore reset intervals."}
+  link_flap_count: {warn: 1, critical: 2, direction: rising_delta, rationale: "One new flap warrants inspection; two in one sample interval suggest instability. Compare counter deltas and exclude resets."}
+  rssi_dbm: {warn: -67, critical: -75, direction: low, rationale: "Cisco uses -67 dBm as a strong Wi-Fi cell-edge goal; the configured -75 to -67 dBm grey zone stays uncertain, while -75 dBm or weaker is severe only with retries and AP-uplink checks."}
+  retry_rate_pct: {warn: 10, critical: 20, direction: high, rationale: "Cisco VoWLAN guidance keeps retransmissions below 20%; 10% is an early warning, and both levels require RSSI and uplink context."}
 
 signatures:
   link_congestion:
