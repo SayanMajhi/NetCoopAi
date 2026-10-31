@@ -4,6 +4,8 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from netcoop.protocol.cards import CARDS
+from netcoop.protocol.compat import UnsupportedVersion, upgrade
 from netcoop.protocol.models import Envelope, Report
 
 EX = Path(__file__).resolve().parents[1] / "examples"
@@ -79,3 +81,28 @@ def test_report_status_rules():
     r["validation_errors"] = []
     with pytest.raises(ValidationError):
         Report.model_validate(r)
+
+
+def test_v2_rejected():
+    with pytest.raises(UnsupportedVersion):
+        upgrade(load("message_v2_0.json"))
+
+
+def test_v0_9_upgrade_not_yet_supported():
+    with pytest.raises(UnsupportedVersion, match="0.9"):
+        upgrade(load("finding_v0_9.json"))
+
+
+def test_unknown_1_x_fields_preserved_in_extra():
+    msg = load("finding.json")
+    msg["protocol"] = "netcoop/1.1"
+    msg["priority"] = "high"
+    body, records = upgrade(msg)
+    env = Envelope.model_validate(body)
+    assert env.extra["priority"] == "high" and records
+
+
+def test_agent_cards():
+    assert len(CARDS) == 5
+    for card in CARDS.values():
+        assert "netcoop/1.0" in card.protocol_versions
