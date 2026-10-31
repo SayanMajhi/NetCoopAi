@@ -116,7 +116,7 @@
         },
         "hypothesis": {
           "description": "<cause>@<device_or_link_id>",
-          "pattern": "^[a-z_]+@[A-Za-z0-9_.:\\-]+$",
+          "pattern": "^(healthy|link_congestion|weak_wifi|interface_fault|device_overload|dns_failure|dhcp_failure|hardware_failure|upstream_dependency)@[A-Za-z0-9_.:\\-]+$",
           "title": "Hypothesis",
           "type": "string"
         },
@@ -144,7 +144,7 @@
           "$ref": "#/$defs/Stance"
         },
         "target_hypothesis": {
-          "pattern": "^[a-z_]+@[A-Za-z0-9_.:\\-]+$",
+          "pattern": "^(healthy|link_congestion|weak_wifi|interface_fault|device_overload|dns_failure|dhcp_failure|hardware_failure|upstream_dependency)@[A-Za-z0-9_.:\\-]+$",
           "title": "Target Hypothesis",
           "type": "string"
         }
@@ -234,7 +234,7 @@
           "type": "number"
         },
         "hypothesis": {
-          "pattern": "^[a-z_]+@[A-Za-z0-9_.:\\-]+$",
+          "pattern": "^(healthy|link_congestion|weak_wifi|interface_fault|device_overload|dns_failure|dhcp_failure|hardware_failure|upstream_dependency)@[A-Za-z0-9_.:\\-]+$",
           "title": "Hypothesis",
           "type": "string"
         },
@@ -526,7 +526,7 @@
       "type": "string"
     },
     "timestamp": {
-      "description": "UTC, ISO 8601",
+      "description": "RFC 3339 date-time with timezone, UTC preferred",
       "format": "date-time",
       "title": "Timestamp",
       "type": "string"

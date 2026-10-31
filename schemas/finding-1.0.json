@@ -37,7 +37,7 @@
     },
     "hypothesis": {
       "description": "<cause>@<device_or_link_id>",
-      "pattern": "^[a-z_]+@[A-Za-z0-9_.:\\-]+$",
+      "pattern": "^(healthy|link_congestion|weak_wifi|interface_fault|device_overload|dns_failure|dhcp_failure|hardware_failure|upstream_dependency)@[A-Za-z0-9_.:\\-]+$",
       "title": "Hypothesis",
       "type": "string"
     },
@@ -65,7 +65,7 @@
       "$ref": "#/$defs/Stance"
     },
     "target_hypothesis": {
-      "pattern": "^[a-z_]+@[A-Za-z0-9_.:\\-]+$",
+      "pattern": "^(healthy|link_congestion|weak_wifi|interface_fault|device_overload|dns_failure|dhcp_failure|hardware_failure|upstream_dependency)@[A-Za-z0-9_.:\\-]+$",
       "title": "Target Hypothesis",
       "type": "string"
     }

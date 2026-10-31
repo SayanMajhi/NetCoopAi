@@ -28,7 +28,7 @@ export type Protocol = string;
 export type Recipient = string;
 export type Sender = string;
 /**
- * UTC, ISO 8601
+ * RFC 3339 date-time with timezone, UTC preferred
  */
 export type Timestamp = string;
 /**

@@ -52,7 +52,7 @@
           "type": "string"
         },
         "timestamp": {
-          "description": "UTC, ISO 8601",
+          "description": "RFC 3339 date-time with timezone, UTC preferred",
           "format": "date-time",
           "title": "Timestamp",
           "type": "string"
@@ -89,6 +89,30 @@
     },
     "Observation": {
       "additionalProperties": false,
+      "anyOf": [
+        {
+          "properties": {
+            "device_id": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "device_id"
+          ]
+        },
+        {
+          "properties": {
+            "link_id": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "link_id"
+          ]
+        }
+      ],
       "properties": {
         "device_id": {
           "anyOf": [

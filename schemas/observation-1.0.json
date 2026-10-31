@@ -19,6 +19,30 @@
   "$id": "observation-1.0.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
+  "anyOf": [
+    {
+      "properties": {
+        "device_id": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "device_id"
+      ]
+    },
+    {
+      "properties": {
+        "link_id": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "link_id"
+      ]
+    }
+  ],
   "properties": {
     "device_id": {
       "anyOf": [

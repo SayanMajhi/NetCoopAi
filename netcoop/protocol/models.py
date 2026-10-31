@@ -10,7 +10,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 PROTOCOL_VERSION = "netcoop/1.0"
 SCHEMA_VERSION = "1.0"
@@ -77,13 +77,21 @@ class QualityFlag(str, Enum):
     out_of_window = "out_of_window"
 
 
-HYPOTHESIS_PATTERN = r"^[a-z_]+@[A-Za-z0-9_.:\-]+$"
+# Built from the Cause enum so the exported JSON Schema rejects unknown causes too.
+HYPOTHESIS_PATTERN = r"^(" + "|".join(c.value for c in Cause) + r")@[A-Za-z0-9_.:\-]+$"
 
 
 def _check_hypothesis(value: str) -> str:
     cause = value.split("@", 1)[0]
     if cause not in Cause.__members__:
         raise ValueError(f"unknown cause '{cause}' in hypothesis '{value}'")
+    return value
+
+
+def _require_datetime_string(value: Any) -> Any:
+    # Pydantic would accept a Unix number here; the wire schema (format: date-time) does not.
+    if not isinstance(value, (str, datetime)):
+        raise ValueError("must be an RFC 3339 date-time string with a timezone, e.g. 2026-10-31T10:30:00Z")
     return value
 
 
@@ -112,7 +120,7 @@ class FindingPayload(_Strict):
     target_hypothesis: str = Field(pattern=HYPOTHESIS_PATTERN)
     evidence_ids: list[str] = Field(min_length=1, description="Canonical evidence IDs cited")
     reason: str = Field(min_length=1)
-    score: Optional[float] = Field(default=None, ge=0, le=1, description="Agent-local signal fit [0,1]")
+    score: Optional[float] = Field(default=None, ge=0, le=1, strict=True, description="Agent-local signal fit [0,1]")
     consumed_message_ids: list[str] = Field(
         default_factory=list, description="Peer messages interpreted to produce this finding"
     )
@@ -136,8 +144,8 @@ class ResponsePayload(_Strict):
 
 class RankedCause(_Strict):
     hypothesis: str = Field(pattern=HYPOTHESIS_PATTERN)
-    confidence: float = Field(ge=0, le=1)
-    coverage: float = Field(ge=0, le=1)
+    confidence: float = Field(ge=0, le=1, strict=True)
+    coverage: float = Field(ge=0, le=1, strict=True)
     supporting_finding_ids: list[str] = Field(default_factory=list)
     contradicting_finding_ids: list[str] = Field(default_factory=list)
 
@@ -181,11 +189,13 @@ class Envelope(_Strict):
     sender: str
     recipient: str
     type: MessageType
-    timestamp: datetime = Field(description="UTC, ISO 8601")
+    timestamp: AwareDatetime = Field(description="RFC 3339 date-time with timezone, UTC preferred")
     payload: dict[str, Any]
     extra: dict[str, Any] = Field(
         default_factory=dict, description="Unknown optional fields preserved from compatible 1.x senders"
     )
+
+    _v_ts = field_validator("timestamp", mode="before")(_require_datetime_string)
 
     @model_validator(mode="after")
     def _payload_matches_type(self) -> "Envelope":
@@ -201,9 +211,15 @@ class Envelope(_Strict):
 
 
 class Observation(_Strict):
+    # Mirrors _has_target in the exported schema: device_id or link_id must be a string.
+    model_config = ConfigDict(json_schema_extra={"anyOf": [
+        {"properties": {"device_id": {"type": "string", "minLength": 1}}, "required": ["device_id"]},
+        {"properties": {"link_id": {"type": "string", "minLength": 1}}, "required": ["link_id"]},
+    ]})
+
     evidence_id: str = Field(description="e.g. EV-014, deterministic per fixture")
     source_id: str = Field(description="Raw sensor/probe identity, e.g. switch-telemetry")
-    observed_at: datetime
+    observed_at: AwareDatetime
     device_id: Optional[str] = None
     link_id: Optional[str] = None
     metric: str = Field(description="Canonical metric name, see PROTOCOL.md")
@@ -213,6 +229,8 @@ class Observation(_Strict):
     original_value: Any = None
     normalization_steps: list[str] = Field(default_factory=list)
     quality_flags: list[QualityFlag] = Field(default_factory=lambda: [QualityFlag.ok])
+
+    _v_ts = field_validator("observed_at", mode="before")(_require_datetime_string)
 
     @model_validator(mode="after")
     def _has_target(self) -> "Observation":
@@ -244,11 +262,34 @@ class EvidenceItem(_Strict):
     source_id: str
 
 
+_NAMED = [Status.diagnosed.value, Status.probable.value]
+_NO_CONFIDENCE = [Status.invalid_input.value, Status.failed.value]
+
+
+def _when_status(statuses: list[str], then: dict[str, Any], otherwise: dict[str, Any] | None = None) -> dict[str, Any]:
+    rule: dict[str, Any] = {"if": {"properties": {"status": {"enum": statuses}}, "required": ["status"]}, "then": then}
+    if otherwise is not None:
+        rule["else"] = otherwise
+    return rule
+
+
 class Report(_Strict):
+    # Mirrors _status_rules in the exported schema, so non-Python consumers enforce them too.
+    model_config = ConfigDict(json_schema_extra={"allOf": [
+        _when_status(_NAMED,
+                     {"properties": {"suspected_root_cause": {"type": "string", "minLength": 1}}},
+                     {"properties": {"suspected_root_cause": {"type": "null"}}}),
+        _when_status(_NO_CONFIDENCE,
+                     {"properties": {"confidence": {"type": "null"}}},
+                     {"properties": {"confidence": {"type": "number"}}}),
+        _when_status([Status.invalid_input.value],
+                     {"properties": {"validation_errors": {"minItems": 1}}, "required": ["validation_errors"]}),
+    ]})
+
     incident_id: str
     status: Status
     suspected_root_cause: Optional[str]
-    confidence: Optional[float] = Field(ge=0, le=1)
+    confidence: Optional[float] = Field(ge=0, le=1, strict=True)
     confidence_method: str = "heuristic-v1"
     signature_version: str
     affected_devices: list[str] = Field(default_factory=list)

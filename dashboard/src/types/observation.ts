@@ -1,5 +1,28 @@
 /* Generated from schemas/observation-1.0.json by `npm run gen:types`. Do not edit. */
 
+export type Observation = (
+  | {
+      device_id: string;
+      [k: string]: unknown;
+    }
+  | {
+      link_id: string;
+      [k: string]: unknown;
+    }
+) & {
+  device_id?: DeviceId;
+  evidence_id: EvidenceId;
+  link_id?: LinkId;
+  metric: Metric;
+  normalization_steps?: NormalizationSteps;
+  observed_at: ObservedAt;
+  original_field: OriginalField;
+  original_value?: OriginalValue;
+  quality_flags?: QualityFlags;
+  source_id: SourceId;
+  unit: Unit;
+  value: Value;
+};
 export type DeviceId = string | null;
 /**
  * e.g. EV-014, deterministic per fixture
@@ -14,7 +37,7 @@ export type NormalizationSteps = string[];
 export type ObservedAt = string;
 export type OriginalField = string;
 /**
- * This interface was referenced by `Observation`'s JSON-Schema
+ * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "QualityFlag".
  */
 export type QualityFlag =
@@ -38,20 +61,6 @@ export type Unit = string;
  */
 export type Value = number | string | boolean | null;
 
-export interface Observation {
-  device_id?: DeviceId;
-  evidence_id: EvidenceId;
-  link_id?: LinkId;
-  metric: Metric;
-  normalization_steps?: NormalizationSteps;
-  observed_at: ObservedAt;
-  original_field: OriginalField;
-  original_value?: OriginalValue;
-  quality_flags?: QualityFlags;
-  source_id: SourceId;
-  unit: Unit;
-  value: Value;
-}
 export interface OriginalValue {
   [k: string]: unknown;
 }
