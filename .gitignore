@@ -1,0 +1,22 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+venv/
+.idea/
+.vscode/
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+
+# generated run outputs (keep the folders and curated examples)
+traces/*
+!traces/.gitkeep
+reports/*
+!reports/examples/
+*.sqlite
+
+# dashboard
+node_modules/
+dashboard/dist/
