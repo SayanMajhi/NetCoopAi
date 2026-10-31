@@ -19,6 +19,10 @@ export type Sender = string;
  * UTC, ISO 8601
  */
 export type Timestamp = string;
+/**
+ * This interface was referenced by `Bundle`'s JSON-Schema
+ * via the `definition` "MessageType".
+ */
 export type MessageType = "TASK" | "FINDING" | "QUERY" | "RESPONSE" | "DECISION" | "ERROR";
 export type Messages = Envelope[];
 export type DeviceId = string | null;
@@ -34,6 +38,10 @@ export type Metric = string;
 export type NormalizationSteps = string[];
 export type ObservedAt = string;
 export type OriginalField = string;
+/**
+ * This interface was referenced by `Bundle`'s JSON-Schema
+ * via the `definition` "QualityFlag".
+ */
 export type QualityFlag =
   | "ok"
   | "missing"
@@ -65,6 +73,10 @@ export interface Bundle {
   observations?: Observations;
   topology?: Topology;
 }
+/**
+ * This interface was referenced by `Bundle`'s JSON-Schema
+ * via the `definition` "Envelope".
+ */
 export interface Envelope {
   extra?: Extra;
   in_reply_to: InReplyTo;
@@ -86,6 +98,10 @@ export interface Extra {
 export interface Payload {
   [k: string]: unknown;
 }
+/**
+ * This interface was referenced by `Bundle`'s JSON-Schema
+ * via the `definition` "Observation".
+ */
 export interface Observation {
   device_id?: DeviceId;
   evidence_id: EvidenceId;

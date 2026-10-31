@@ -11,6 +11,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },

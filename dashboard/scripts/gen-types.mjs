@@ -13,6 +13,7 @@ for (const file of readdirSync(schemasDir).filter((f) => f.endsWith(".json")).so
     cwd: schemasDir,
     bannerComment: `/* Generated from schemas/${file} by \`npm run gen:types\`. Do not edit. */`,
     style: { singleQuote: false },
+    unreachableDefinitions: true,
   });
   const name = file.replace(/-\d+\.\d+\.json$/, ".ts");
   writeFileSync(join(outDir, name), ts);

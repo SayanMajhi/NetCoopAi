@@ -13,6 +13,10 @@ export type Metric = string;
 export type NormalizationSteps = string[];
 export type ObservedAt = string;
 export type OriginalField = string;
+/**
+ * This interface was referenced by `Observation`'s JSON-Schema
+ * via the `definition` "QualityFlag".
+ */
 export type QualityFlag =
   | "ok"
   | "missing"
