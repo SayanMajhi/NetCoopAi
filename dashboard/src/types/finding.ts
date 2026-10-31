@@ -23,6 +23,10 @@ export type Reason = string;
  * Agent-local signal fit [0,1]
  */
 export type Score = number | null;
+/**
+ * This interface was referenced by `FindingPayload`'s JSON-Schema
+ * via the `definition` "Stance".
+ */
 export type Stance = "supports" | "contradicts";
 export type TargetHypothesis = string;
 

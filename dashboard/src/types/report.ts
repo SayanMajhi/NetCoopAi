@@ -13,6 +13,10 @@ export type Limitations = string[];
 export type NormalizationLog = string[];
 export type RecommendedActions = string[];
 export type SignatureVersion = string;
+/**
+ * This interface was referenced by `Report`'s JSON-Schema
+ * via the `definition` "Status".
+ */
 export type Status = "diagnosed" | "probable" | "healthy" | "insufficient_evidence" | "invalid_input" | "failed";
 export type EvidenceId = string;
 export type Metric = string;
@@ -42,6 +46,10 @@ export interface Report {
   suspected_root_cause: SuspectedRootCause;
   validation_errors?: ValidationErrors;
 }
+/**
+ * This interface was referenced by `Report`'s JSON-Schema
+ * via the `definition` "EvidenceItem".
+ */
 export interface EvidenceItem {
   evidence_id: EvidenceId;
   metric: Metric;
