@@ -2,7 +2,8 @@
 
 POST /messages takes a Bundle (schemas/bundle-1.0.json): `messages[0]` is the TASK
 addressed to this agent, the rest are the peer FINDINGs it may use, plus the
-`observations` and `topology` they cite. The reply is a Bundle too.
+`observations` and `topology` they cite. The reply is a Bundle too, holding what
+connectivity_service/logic.py concludes (FINDINGs, or a RESPONSE when it cannot judge).
 
 Bodies are validated with jsonschema against schemas/bundle-1.0.json and, per
 message, schemas/message-1.0.json (format checker on), not the Python models, so
@@ -33,7 +34,9 @@ from fastapi.responses import JSONResponse
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError, best_match
 
+from connectivity_service.logic import handle_bundle
 from netcoop.orchestrator.eventlog import EventLog
+from netcoop.protocol.models import Envelope, Observation
 
 AGENT_ID = "connectivity_agent"
 PROTOCOL = "netcoop/1.0"
@@ -90,12 +93,11 @@ def _first_message(body: Any) -> Any:
 
 
 class _Delivery:
-    """State for one Bundle: messages seen and per-request reply/error counters."""
+    """State for one Bundle: messages seen and the per-request error counter."""
 
     def __init__(self) -> None:
         self.seen: set[str] = set()
         self.errors: list[dict[str, Any]] = []
-        self.reply_count = 0
         self.error_count = 0
 
 
@@ -124,7 +126,11 @@ class ConnectivityService:
                 return 400, {"messages": delivery.errors}
             if message is not None:
                 accepted.append(message)
-        return 200, {"messages": self._reply(delivery, accepted[0], accepted[1:]) + delivery.errors}
+        try:
+            replies = self._reply(accepted[0], accepted[1:], body)
+        except _Rejected as rej:
+            return rej.status, {"messages": [self._error(delivery, accepted[0], rej), *delivery.errors]}
+        return 200, {"messages": replies + delivery.errors}
 
     # ----------------------------------------------------------------- validation
 
@@ -201,28 +207,18 @@ class ConnectivityService:
 
     # ----------------------------------------------------------------- replies
 
-    def _reply(self, delivery: _Delivery, task: dict[str, Any], peers: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Stub RESPONSE to the TASK until the connectivity analysis lands (C3)."""
-        delivery.reply_count += 1
-        reply = {
-            "protocol": PROTOCOL,
-            "message_id": f"{task['incident_id']}-CONN-{delivery.reply_count:02d}",
-            "incident_id": task["incident_id"],
-            "in_reply_to": task["message_id"],
-            "sender": AGENT_ID,
-            "recipient": task["sender"],
-            "type": "RESPONSE",
-            "timestamp": task["timestamp"],      # incident clock, so replies are reproducible
-            "payload": {
-                "query_id": None,
-                "evidence_ids": [],
-                "answer": f"received TASK {task['message_id']} with {len(peers)} peer message(s); "
-                          "connectivity analysis not implemented yet",
-            },
-            "extra": {},
-        }
-        self._message.validate(reply)
-        return [reply]
+    def _reply(self, task: dict[str, Any], peers: list[dict[str, Any]], body: dict[str, Any]) -> list[dict[str, Any]]:
+        """Run the connectivity analysis (logic.py) on the accepted messages; check what it sends."""
+        try:
+            messages = [Envelope.model_validate(m) for m in [task, *peers]]
+            observations = [Observation.model_validate(o) for o in body.get("observations") or []]
+            replies = [m.model_dump(mode="json") for m in handle_bundle(messages, observations,
+                                                                         body.get("topology") or {})]
+            for reply in replies:
+                self._message.validate(reply)
+        except Exception as exc:  # an analysis bug must come back as a typed ERROR, not a 500 page
+            raise _Rejected("AGENT_FAILURE", f"{type(exc).__name__}: {exc}", None, 500) from exc
+        return replies
 
     def _error(self, delivery: _Delivery, body: Any, rej: _Rejected) -> dict[str, Any]:
         delivery.error_count += 1

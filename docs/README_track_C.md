@@ -183,9 +183,26 @@ curl -i -H "Content-Type: application/json" --data @docs/m2_curl/bundle.json loc
 `docs/m2_curl/bundle_bad_peer.json` is the same Bundle with `stance` removed from the peer FINDING.
 The Phase 1 proof (`docs/m1_curl/`) used single messages and no longer matches the endpoint.
 
-**Current limit:** the RESPONSE is a stub that reports how many peer messages it accepted.
-Real topology, DNS/DHCP, reachability and peer-finding analysis is C3
-(`connectivity_service/logic.py`).
+### Connectivity reasoning — `connectivity_service/logic.py` (C3)
+
+`handle_bundle(messages, observations, topology)` is the agent (`connectivity_agent`, IDs `CONN`).
+It reads the topology as a tree (each link runs from `a`, towards the core, to `b`) and never
+needs thresholds: the checks it owns are booleans. Missing, stale or malformed checks are unknown.
+
+| Evidence | Finding |
+|---|---|
+| `dns_success` / `dhcp_success` false on clients, server (`services` in topology) reachable | `dns_failure` / `dhcp_failure@SRV_DNS_DHCP_01` supports (0.8 for ≥ 2 clients and server known reachable, else 0.6) |
+| Same, but the server itself is unreachable | `upstream_dependency@SRV_LINK_01` **contradicts** `dns_failure` / `dhcp_failure` |
+| Every client's check succeeds | `healthy@SRV_DNS_DHCP_01` **contradicts** `dns_failure` / `dhcp_failure` |
+| Devices unreachable, all behind one link | `upstream_dependency@<link>` (or `@<switch>` when the switch just below still answers), with the blast radius |
+| **Peer FINDINGs** naming faults on topology elements | `upstream_dependency@<deepest link they all share>` with blast radius and `consumed_message_ids`; 0.7 if two agents agree, 0.5 if one, 0.4 per link when the faults share no upstream |
+| No peer faults, every own check passes | `healthy@<common upstream of the TASK scope>` |
+| No checks of its own and no usable peers | a `RESPONSE` saying it cannot judge |
+
+So the peers change the conclusion: on congestion the normal run says
+`upstream_dependency@HOSTEL_UPLINK_01` (consuming the Performance/Infrastructure findings), the
+`--control` run says `healthy@HOSTEL_UPLINK_01`. Peer evidence IDs that are not in the Bundle are
+never cited. If the analysis crashes, the service answers HTTP 500 with a typed `AGENT_FAILURE` ERROR.
 
 ## Tests
 
@@ -193,7 +210,8 @@ Real topology, DNS/DHCP, reachability and peer-finding analysis is C3
 |---|---|---|
 | `tests/test_topology.py` | 8 | Topology integrity, shared upstream, generator IDs, one uplink per switch |
 | `tests/test_bus.py` | 13 | Valid, duplicate and invalid messages all logged; v2 unsupported; missing protocol; 1.x unknown fields; malformed JSON; payload field paths; resend after fix; file-backed log |
-| `tests/test_connectivity_service.py` | 21 | Card; Bundle in/out; reply uses incident clock and repeats identically; bare envelope, empty messages, bad observation, unknown field rejected; TASK checks (missing field, not a TASK, wrong recipient, bad timestamp, v2); bad/v2/duplicate peers dropped with ERROR while the TASK is answered; 1.x extra fields; every message logged |
+| `tests/test_connectivity_service.py` | 22 | Card; Bundle in/out; reply uses incident clock and repeats identically; bare envelope, empty messages, bad observation, unknown field rejected; TASK checks (missing field, not a TASK, wrong recipient, bad timestamp, v2); bad/v2/duplicate peers dropped with ERROR while the TASK is answered; 1.x extra fields; every message logged; analysis crash → `AGENT_FAILURE` |
+| `tests/test_connectivity_logic.py` | 17 | Topology upstream/blast radius; peers localise to the shared uplink and are consumed; control run differs; independent faults; contradicting/healthy/unknown peers; DNS/DHCP failure and server unreachable; unreachable devices; missing ≠ failure; determinism; real pipeline normal vs control |
 
 ```bash
 pytest -q

@@ -118,9 +118,9 @@ def test_bad_message_rejected_everywhere(name: str, client: TestClient) -> None:
     assert list(MESSAGE_SCHEMA.iter_errors(body)), f"JSON Schema accepted: {name}"
     accepted, error = MessageBus().deliver(copy.deepcopy(body))
     assert accepted is None and error is not None, f"bus accepted: {name}"
-    replies = post_as_peer(client, {**body, "message_id": f"PARITY-{name}"})
-    assert [m["type"] for m in replies] == ["RESPONSE", "ERROR"], f"REST accepted: {name}"
-    assert replies[1]["payload"]["offending_message_id"] == f"PARITY-{name}"
+    errors = [m for m in post_as_peer(client, {**body, "message_id": f"PARITY-{name}"}) if m["type"] == "ERROR"]
+    assert len(errors) == 1, f"REST accepted: {name}"
+    assert errors[0]["payload"]["offending_message_id"] == f"PARITY-{name}"
 
 
 @pytest.mark.parametrize("name", sorted(BAD_REPORTS))
@@ -145,7 +145,7 @@ def test_good_message_accepted_everywhere(name: str, client: TestClient) -> None
     Envelope.model_validate(copy.deepcopy(body))
     assert not list(MESSAGE_SCHEMA.iter_errors(body))
     replies = post_as_peer(client, {**body, "message_id": f"PARITY-OK-{name}"})
-    assert [m["type"] for m in replies] == ["RESPONSE"], f"REST rejected: {name}"
+    assert replies and all(m["type"] != "ERROR" for m in replies), f"REST rejected: {name}"
 
 
 @pytest.mark.parametrize("name", ["report_diagnosed.json", "report_insufficient.json", "report_invalid_input.json"])

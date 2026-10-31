@@ -68,18 +68,20 @@ def test_card_matches_registered_card(client):
     assert resp.json() == CARD == CARDS["connectivity_agent"].model_dump()
 
 
-def test_valid_bundle_gets_reply_bundle_answering_the_task(client):
+def test_valid_bundle_gets_the_connectivity_analysis(client):
     [reply] = reply_messages(client.post("/messages", json=bundle()), 200)
-    assert reply["type"] == "RESPONSE"
-    assert reply["in_reply_to"] == "INC-0001-ORCH-03" and reply["recipient"] == "orchestrator"
+    assert reply["type"] == "FINDING"
+    assert reply["in_reply_to"] == "INC-0001-ORCH-03" and reply["recipient"] == "correlation_agent"
     assert reply["message_id"] == "INC-0001-CONN-01"
     assert reply["timestamp"] == TASK["timestamp"]           # incident clock, not wall clock
-    assert "1 peer message" in reply["payload"]["answer"]
+    assert reply["payload"]["hypothesis"] == "upstream_dependency@HOSTEL_UPLINK_01"
+    assert reply["payload"]["consumed_message_ids"] == ["INC-0001-INF-02"]
 
 
-def test_bundle_with_only_a_task_is_valid(client):
+def test_bundle_with_only_a_task_gets_a_response(client):
     [reply] = reply_messages(client.post("/messages", json=bundle(message(TASK), observations=[])), 200)
-    assert "0 peer message" in reply["payload"]["answer"]
+    assert reply["type"] == "RESPONSE" and reply["in_reply_to"] == "INC-0001-ORCH-03"
+    assert "cannot judge" in reply["payload"]["answer"]
 
 
 def test_same_bundle_twice_gets_the_same_reply(client):
@@ -151,8 +153,7 @@ def test_bad_peer_finding_is_dropped_with_error_and_task_still_answered(client):
     peer = message(FINDING)
     del peer["payload"]["stance"]
     messages = reply_messages(client.post("/messages", json=bundle(message(TASK), peer)), 200)
-    assert [m["type"] for m in messages] == ["RESPONSE", "ERROR"]
-    assert "0 peer message" in messages[0]["payload"]["answer"]
+    assert [m["type"] for m in messages] == ["RESPONSE", "ERROR"]   # no usable peer left to interpret
     assert messages[1]["payload"]["code"] == "MISSING_FIELD"
     assert messages[1]["payload"]["field_path"] == "messages.1.payload.stance"
     assert messages[1]["recipient"] == "infrastructure_agent"
@@ -174,7 +175,7 @@ def test_v2_peer_is_unsupported_but_task_answered(client):
 def test_duplicate_in_bundle_is_ignored_and_logged(client):
     messages = reply_messages(client.post("/messages", json=bundle(message(TASK), message(FINDING),
                                                                      message(FINDING))), 200)
-    assert "1 peer message" in messages[0]["payload"]["answer"]
+    assert messages[0]["payload"]["consumed_message_ids"] == ["INC-0001-INF-02"]
     assert messages[1]["payload"]["code"] == "DUPLICATE_MESSAGE"
     rows = client.get("/events").json()
     assert [r["valid"] for r in rows] == [1, 1, 0]
@@ -184,7 +185,7 @@ def test_duplicate_in_bundle_is_ignored_and_logged(client):
 def test_unknown_1x_field_is_accepted_into_extra(client):
     peer = message(FINDING, protocol="netcoop/1.2", priority="high")
     [reply] = reply_messages(client.post("/messages", json=bundle(message(TASK), peer)), 200)
-    assert "1 peer message" in reply["payload"]["answer"]
+    assert reply["payload"]["consumed_message_ids"] == ["INC-0001-INF-02"]
 
 
 def test_every_message_is_logged(tmp_path):
@@ -198,3 +199,11 @@ def test_every_message_is_logged(tmp_path):
         ("INC-0001-ORCH-03", 1), ("INC-0001-INF-02", 1), ("INC-0001-INF-03", 0), ("INC-0001-INF-02", 0),
     ]
     assert db.exists()
+
+
+def test_analysis_crash_is_typed_agent_failure(client, monkeypatch):
+    def boom(*_):
+        raise RuntimeError("bug")
+    monkeypatch.setattr("connectivity_service.app.handle_bundle", boom)
+    error = assert_error(client.post("/messages", json=bundle()), 500, "AGENT_FAILURE", None)
+    assert error["in_reply_to"] == "INC-0001-ORCH-03"
