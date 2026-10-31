@@ -16,7 +16,7 @@ export type Protocol = string;
 export type Recipient = string;
 export type Sender = string;
 /**
- * UTC, ISO 8601
+ * RFC 3339 date-time with timezone, UTC preferred
  */
 export type Timestamp = string;
 /**
@@ -25,6 +25,20 @@ export type Timestamp = string;
  */
 export type MessageType = "TASK" | "FINDING" | "QUERY" | "RESPONSE" | "DECISION" | "ERROR";
 export type Messages = Envelope[];
+/**
+ * This interface was referenced by `Bundle`'s JSON-Schema
+ * via the `definition` "Observation".
+ */
+export type Observation = Observation1 & Observation2;
+export type Observation1 =
+  | {
+      device_id: string;
+      [k: string]: unknown;
+    }
+  | {
+      link_id: string;
+      [k: string]: unknown;
+    };
 export type DeviceId = string | null;
 /**
  * e.g. EV-014, deterministic per fixture
@@ -98,11 +112,7 @@ export interface Extra {
 export interface Payload {
   [k: string]: unknown;
 }
-/**
- * This interface was referenced by `Bundle`'s JSON-Schema
- * via the `definition` "Observation".
- */
-export interface Observation {
+export interface Observation2 {
   device_id?: DeviceId;
   evidence_id: EvidenceId;
   link_id?: LinkId;

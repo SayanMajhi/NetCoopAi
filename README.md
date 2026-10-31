@@ -2,7 +2,9 @@
 
 Five specialist agents exchange **validatable evidence** over a versioned protocol (`netcoop/1.0`), challenge one another, and publish **one** evidence-based JSON diagnosis of a campus network fault. Data is synthetic; nothing touches a real network.
 
-- Problem statement: IIT Agentic AI Hackathon — NetCoop AI
+- Problem statement: [docs/problem_statement.pdf](docs/problem_statement.pdf)
+- Architecture: [ARCHITECTURE.md](ARCHITECTURE.md) · context for AI coding assistants: [CLAUDE.md](CLAUDE.md)
+- Phase plan and status: [docs/STATUS.md](docs/STATUS.md) · Phase 1 tasks: [docs/PHASE1_TASKS.md](docs/PHASE1_TASKS.md)
 - Protocol and field reference: [PROTOCOL.md](PROTOCOL.md), generated JSON Schemas in [schemas/](schemas/)
 - Organizer data and field mapping: [data/field_mapping.md](data/field_mapping.md)
 - Connectivity REST service: [docs/README_track_C.md](docs/README_track_C.md)

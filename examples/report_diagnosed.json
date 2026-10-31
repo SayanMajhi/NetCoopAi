@@ -5,12 +5,12 @@
   "confidence": 0.81,
   "confidence_method": "heuristic-v1",
   "signature_version": "1.0",
-  "affected_devices": ["HOSTEL_CORE_SW_01"],
+  "affected_devices": ["SW_CAMPUS_1"],
   "affected_segments": ["HOSTEL_UPLINK_01"],
   "supporting_evidence": [
     {"evidence_id": "EV-011", "metric": "link_utilization_pct", "value": 94, "unit": "percent", "source_id": "switch-telemetry"},
     {"evidence_id": "EV-012", "metric": "latency_ms", "value": 280, "unit": "ms", "source_id": "client-probe"},
-    {"evidence_id": "EV-013", "metric": "queue_drops_per_min", "value": 160, "unit": "packets/min", "source_id": "switch-telemetry"}
+    {"evidence_id": "EV-013", "metric": "queue_drops", "value": 160, "unit": "count", "source_id": "switch-telemetry"}
   ],
   "agent_findings": ["F-CONN-01", "F-INF-01", "F-PERF-01"],
   "alternative_causes": ["interface_fault@HOSTEL_UPLINK_01"],

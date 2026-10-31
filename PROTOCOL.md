@@ -48,7 +48,7 @@ _Generated from `netcoop/protocol/models.py` (netcoop/1.0). Do not edit by hand.
 | `sender` | string | yes |  |
 | `recipient` | string | yes |  |
 | `type` | MessageType | yes |  |
-| `timestamp` | string | yes | UTC, ISO 8601 |
+| `timestamp` | string | yes | RFC 3339 date-time with timezone, UTC preferred |
 | `payload` | object | yes |  |
 | `extra` | object | no | Unknown optional fields preserved from compatible 1.x senders |
 

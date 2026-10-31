@@ -20,7 +20,7 @@ class AgentCard(BaseModel):
 
 V = [f"netcoop/{SCHEMA_VERSION}"]
 
-# TODO(Lead): finalize owned_metrics once data/field_mapping.md is frozen.
+# owned_metrics match data/field_mapping.md; tests/test_signatures.py and tests/test_examples.py check them.
 CARDS: dict[str, AgentCard] = {
     c.agent_id: c
     for c in [

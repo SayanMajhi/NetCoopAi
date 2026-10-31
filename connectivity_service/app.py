@@ -65,7 +65,8 @@ def _field_path(error: ValidationError) -> str:
 class ConnectivityService:
     def __init__(self, log: EventLog) -> None:
         self.log = log
-        self._validator = Draft202012Validator(json.loads(SCHEMA_PATH.read_text(encoding="utf-8")))
+        self._validator = Draft202012Validator(json.loads(SCHEMA_PATH.read_text(encoding="utf-8")),
+                                               format_checker=Draft202012Validator.FORMAT_CHECKER)
         self._envelope_fields = set(self._validator.schema["properties"])
         self._seen: set[str] = set()
         self._reply_count = 0
