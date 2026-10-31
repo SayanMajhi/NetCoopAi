@@ -11,6 +11,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from netcoop.normalizer.result import NormalizationResult
+from netcoop.normalizer.windows import counter_deltas
 from netcoop.protocol.models import Observation
 
 
@@ -243,12 +244,15 @@ def _utilization(rows: list[dict[str, Any]], links: dict[str, dict], log: list[s
 
 
 def _counter_resets(rows: list[dict[str, Any]], log: list[str]) -> None:
-    last: dict[tuple[str, str, str], float] = {}
-    for row in sorted(rows, key=lambda r: (r["observed_at"], r["_ordinal"])):
-        if row["metric"] not in _COUNTERS or row["value"] is None or "stale" in row["quality_flags"]:
-            continue
-        key = (row["_target"], row["metric"], row["source_id"])
-        if key in last and row["value"] < last[key]:
-            row["quality_flags"] = [f for f in row["quality_flags"] if f != "ok"] + ["counter_reset"]
-            log.append(f"{row['_target']} {row['metric']} at {row['observed_at'].isoformat()}: counter reset {last[key]:g} -> {row['value']:g}")
-        last[key] = row["value"]
+    groups: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
+    for row in rows:
+        if row["metric"] in _COUNTERS:
+            groups.setdefault((row["_target"], row["metric"], row["source_id"]), []).append(row)
+    for group in groups.values():
+        group.sort(key=lambda r: (r["observed_at"], r["_ordinal"]))
+        values = [row["value"] if "stale" not in row["quality_flags"] else None for row in group]
+        _, resets = counter_deltas(values)
+        for index in resets:
+            row = group[index]
+            row["quality_flags"] = [flag for flag in row["quality_flags"] if flag != "ok"] + ["counter_reset"]
+            log.append(f"{row['_target']} {row['metric']} at {row['observed_at'].isoformat()}: counter reset {values[index - 1]:g} -> {values[index]:g}")
