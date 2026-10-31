@@ -1,0 +1,128 @@
+version: "1.0"
+
+window:
+  minutes: 5
+  congestion_min_consecutive_samples: 3
+  sparse_samples_reduce_coverage: true
+
+rssi:
+  grey_zone_dbm:
+    lower_exclusive: -75
+    upper_exclusive: -67
+
+thresholds:
+  latency_ms: {warn: null, critical: null, direction: high, rationale: "Elevated delay may support congestion or path faults."}
+  jitter_ms: {warn: null, critical: null, direction: high, rationale: "Variable delay supports performance degradation."}
+  packet_loss_pct: {warn: null, critical: null, direction: high, rationale: "Loss supports a network fault when scope and timing agree."}
+  link_utilization_pct: {warn: null, critical: null, direction: high, rationale: "Sustained high utilization is required for congestion."}
+  throughput_mbps: {warn: null, critical: null, direction: low_relative_to_capacity, rationale: "Compare throughput with capacity and baseline."}
+  capacity_mbps: {warn: null, critical: null, direction: context, rationale: "Capacity is used to interpret throughput and utilization."}
+  cpu_pct: {warn: null, critical: null, direction: high, rationale: "High device CPU may support overload."}
+  memory_pct: {warn: null, critical: null, direction: high, rationale: "High device memory may support overload."}
+  queue_drops: {warn: null, critical: null, direction: rising_delta, rationale: "Compare counter deltas over time; one raw count is insufficient."}
+  interface_errors: {warn: null, critical: null, direction: rising_delta, rationale: "Compare counter deltas over time; flag counter resets."}
+  link_flap_count: {warn: null, critical: null, direction: rising_delta, rationale: "Increasing flaps may support an interface fault."}
+  rssi_dbm: {warn: null, critical: null, direction: low, rationale: "Weak or grey-zone signal needs retry evidence."}
+  retry_rate_pct: {warn: null, critical: null, direction: high, rationale: "Elevated retries corroborate weak Wi-Fi."}
+
+signatures:
+  link_congestion:
+    required:
+      - {metric: link_utilization_pct, check: sustained_above_critical}
+    corroborating:
+      min_matches: 1
+      checks:
+        - {metric: queue_drops, check: rising_delta}
+        - {metric: latency_ms, check: above_warn}
+    contradicting:
+      - {metric: link_utilization_pct, check: below_warn}
+
+  weak_wifi:
+    required:
+      - {metric: rssi_dbm, check: weak_or_grey_zone}
+      - {metric: retry_rate_pct, check: above_warn}
+      - {probe: ap_uplink, check: healthy}
+    corroborating:
+      min_matches: 0
+      checks:
+        - {metric: packet_loss_pct, check: above_warn}
+    contradicting:
+      - {probe: ap_uplink, check: unhealthy}
+
+  interface_fault:
+    required:
+      - any_of:
+          - {metric: interface_errors, check: rising_delta}
+          - {metric: link_flap_count, check: rising_delta}
+      - {metric: packet_loss_pct, check: downstream_above_warn}
+    corroborating:
+      min_matches: 0
+      checks:
+        - {metric: interface_oper_status, check: down_or_flapping}
+    contradicting:
+      - {metric: packet_loss_pct, check: normal_downstream}
+
+  dns_failure:
+    required:
+      - {probe: dns_lookup, check: failed}
+      - {probe: ip_path, check: reachable}
+    corroborating:
+      min_matches: 0
+      checks:
+        - {probe: dns_lookup_multiple_clients, check: failed}
+    contradicting:
+      - {probe: ip_path, check: unreachable}
+
+  dhcp_failure:
+    required:
+      - {probe: dhcp_lease, check: failed}
+      - {probe: dhcp_server_path, check: reachable}
+    corroborating:
+      min_matches: 0
+      checks:
+        - {probe: dhcp_lease_multiple_clients, check: failed}
+    contradicting:
+      - {probe: dhcp_server_path, check: unreachable}
+
+healthy_coverage:
+  require_fresh_performance_measurements: true
+  require_fresh_infrastructure_measurements: true
+  require_relevant_service_checks: true
+  require_relevant_path_checks: true
+  allow_unresolved_major_contradictions: false
+
+confidence:
+  method: heuristic-v1
+  signal_fit_weight: 0.40
+  topology_fit_weight: 0.25
+  time_fit_weight: 0.20
+  independent_source_fit_weight: 0.15
+  contradiction_penalty: 0.15
+  multiply_by_coverage: true
+  deduplicate_by_evidence_id: true
+
+decision_gates:
+  diagnosed:
+    min_confidence: 0.70
+    min_coverage: 0.75
+    min_independent_raw_sources: 2
+    min_lead_over_runner_up: 0.15
+  probable:
+    min_confidence: 0.50
+    require_named_limitation_or_rival: true
+  insufficient_evidence:
+    when_below_probable_gate: true
+    when_major_contradiction_unresolved: true
+
+evaluation_rules:
+  required_list: all_checks_must_pass
+  any_of: at_least_one_check_must_pass
+  corroborating: at_least_min_matches_must_pass
+  scope: same_incident_and_relevant_topology_scope
+  time: checks_must_use_the_configured_window
+  missing_or_stale: unknown_not_false
+  null_threshold: check_unavailable
+  coverage:
+    numerator: fresh_valid_required_checks
+    denominator: applicable_required_checks
+    missing_required_checks_count_in_denominator: true
