@@ -22,4 +22,4 @@ I inspected the notebook's generator code. Its three distinct paths are normal, 
 
 Each call to `generate_telemetry()` returns one observation for one randomly selected device. The output has one timestamp and no topology links or repeated measurements. Therefore, these raw files cannot directly support five-minute windows or counter deltas.
 
-The output `status` describes severity (Healthy, Warning, or Critical). The `fault_type` used to generate the observation is not included in the JSON, so these files do not provide a root-cause label for accuracy evaluation.
+The project assumes `queue_drops` and `interface_errors` are cumulative counters unless source metadata says they are rates. The organizer generator does not provide metadata confirming which interpretation is correct. Each generated output contains only one reading for a randomly selected device, so these raw files cannot provide a counter delta, per-minute rate, or reset check. Those calculations require at least two time-ordered readings for the same device and counter.
