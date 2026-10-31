@@ -1,0 +1,242 @@
+{
+  "messages": [
+    {
+      "protocol": "netcoop/1.0",
+      "message_id": "INC-0001-ORCH-03",
+      "incident_id": "INC-0001",
+      "in_reply_to": null,
+      "sender": "orchestrator",
+      "recipient": "connectivity_agent",
+      "type": "TASK",
+      "timestamp": "2026-10-31T10:30:00Z",
+      "payload": {
+        "task_id": "INC-0001-T-CONN",
+        "capability": "interpret_peer_findings",
+        "scope_ids": [
+          "SW_CAMPUS_1"
+        ],
+        "evidence_ids": [],
+        "peer_message_ids": [
+          "INC-0001-PERF-01",
+          "INC-0001-INF-02"
+        ],
+        "instructions": ""
+      },
+      "extra": {}
+    },
+    {
+      "protocol": "netcoop/1.0",
+      "message_id": "INC-0001-INF-02",
+      "incident_id": "INC-0001",
+      "in_reply_to": "INC-0001-ORCH-01",
+      "sender": "infrastructure_agent",
+      "recipient": "correlation_agent",
+      "type": "FINDING",
+      "timestamp": "2026-10-31T10:30:00Z",
+      "payload": {
+        "finding_id": "F-INF-01",
+        "hypothesis": "link_congestion@HOSTEL_UPLINK_01",
+        "stance": "contradicts",
+        "target_hypothesis": "link_congestion@HOSTEL_UPLINK_01",
+        "evidence_ids": [
+          "EV-014"
+        ],
+        "reason": "Interface errors rise while utilization stays below baseline",
+        "score": 0.6,
+        "consumed_message_ids": []
+      },
+      "extra": {}
+    }
+  ],
+  "observations": [
+    {
+      "evidence_id": "EV-014",
+      "source_id": "switch-telemetry",
+      "observed_at": "2026-10-31T10:29:00Z",
+      "link_id": "HOSTEL_UPLINK_01",
+      "metric": "link_utilization_pct",
+      "value": 41.0,
+      "unit": "%",
+      "original_field": "metrics.link_utilization_pct",
+      "original_value": 41.0,
+      "normalization_steps": [],
+      "quality_flags": [
+        "ok"
+      ]
+    }
+  ],
+  "topology": {
+    "topology_version": "1.1",
+    "description": "Synthetic campus network: core router, hostel and department distribution, access layer, APs, DNS/DHCP server. Switch IDs SW_CAMPUS_1..10 are the device IDs the organizer generator emits (B3); the generator supplies no links, so links and capacities are ours. HOSTEL_UPLINK_01 is the shared upstream for every hostel device.",
+    "nodes": [
+      {
+        "id": "CORE_RTR_01",
+        "type": "router",
+        "zone": "core",
+        "label": "Campus core router"
+      },
+      {
+        "id": "SRV_DNS_DHCP_01",
+        "type": "server",
+        "zone": "datacenter",
+        "label": "DNS/DHCP server",
+        "services": [
+          "dns",
+          "dhcp"
+        ]
+      },
+      {
+        "id": "SW_CAMPUS_1",
+        "type": "distribution_switch",
+        "zone": "hostel",
+        "label": "Hostel distribution switch"
+      },
+      {
+        "id": "SW_CAMPUS_2",
+        "type": "distribution_switch",
+        "zone": "department",
+        "label": "Department distribution switch"
+      },
+      {
+        "id": "SW_CAMPUS_3",
+        "type": "access_switch",
+        "zone": "hostel",
+        "label": "Hostel block A access switch"
+      },
+      {
+        "id": "SW_CAMPUS_4",
+        "type": "access_switch",
+        "zone": "hostel",
+        "label": "Hostel block B access switch"
+      },
+      {
+        "id": "SW_CAMPUS_5",
+        "type": "access_switch",
+        "zone": "hostel",
+        "label": "Hostel block C access switch"
+      },
+      {
+        "id": "SW_CAMPUS_6",
+        "type": "access_switch",
+        "zone": "hostel",
+        "label": "Hostel block D access switch"
+      },
+      {
+        "id": "SW_CAMPUS_7",
+        "type": "access_switch",
+        "zone": "department",
+        "label": "CSE department access switch"
+      },
+      {
+        "id": "SW_CAMPUS_8",
+        "type": "access_switch",
+        "zone": "department",
+        "label": "EE department access switch"
+      },
+      {
+        "id": "SW_CAMPUS_9",
+        "type": "access_switch",
+        "zone": "department",
+        "label": "Lecture hall access switch"
+      },
+      {
+        "id": "SW_CAMPUS_10",
+        "type": "access_switch",
+        "zone": "department",
+        "label": "Library access switch"
+      },
+      {
+        "id": "HOSTEL_AP_01",
+        "type": "access_point",
+        "zone": "hostel",
+        "label": "Hostel block A Wi-Fi AP"
+      },
+      {
+        "id": "DEPT_AP_01",
+        "type": "access_point",
+        "zone": "department",
+        "label": "CSE department Wi-Fi AP"
+      }
+    ],
+    "links": [
+      {
+        "link_id": "HOSTEL_UPLINK_01",
+        "a": "CORE_RTR_01",
+        "b": "SW_CAMPUS_1",
+        "capacity_mbps": 1000
+      },
+      {
+        "link_id": "DEPT_UPLINK_01",
+        "a": "CORE_RTR_01",
+        "b": "SW_CAMPUS_2",
+        "capacity_mbps": 1000
+      },
+      {
+        "link_id": "SRV_LINK_01",
+        "a": "CORE_RTR_01",
+        "b": "SRV_DNS_DHCP_01",
+        "capacity_mbps": 10000
+      },
+      {
+        "link_id": "ACC_LINK_03",
+        "a": "SW_CAMPUS_1",
+        "b": "SW_CAMPUS_3",
+        "capacity_mbps": 1000
+      },
+      {
+        "link_id": "ACC_LINK_04",
+        "a": "SW_CAMPUS_1",
+        "b": "SW_CAMPUS_4",
+        "capacity_mbps": 1000
+      },
+      {
+        "link_id": "ACC_LINK_05",
+        "a": "SW_CAMPUS_1",
+        "b": "SW_CAMPUS_5",
+        "capacity_mbps": 1000
+      },
+      {
+        "link_id": "ACC_LINK_06",
+        "a": "SW_CAMPUS_1",
+        "b": "SW_CAMPUS_6",
+        "capacity_mbps": 1000
+      },
+      {
+        "link_id": "ACC_LINK_07",
+        "a": "SW_CAMPUS_2",
+        "b": "SW_CAMPUS_7",
+        "capacity_mbps": 1000
+      },
+      {
+        "link_id": "ACC_LINK_08",
+        "a": "SW_CAMPUS_2",
+        "b": "SW_CAMPUS_8",
+        "capacity_mbps": 1000
+      },
+      {
+        "link_id": "ACC_LINK_09",
+        "a": "SW_CAMPUS_2",
+        "b": "SW_CAMPUS_9",
+        "capacity_mbps": 1000
+      },
+      {
+        "link_id": "ACC_LINK_10",
+        "a": "SW_CAMPUS_2",
+        "b": "SW_CAMPUS_10",
+        "capacity_mbps": 1000
+      },
+      {
+        "link_id": "HOSTEL_AP_LINK_01",
+        "a": "SW_CAMPUS_3",
+        "b": "HOSTEL_AP_01",
+        "capacity_mbps": 1000
+      },
+      {
+        "link_id": "DEPT_AP_LINK_01",
+        "a": "SW_CAMPUS_7",
+        "b": "DEPT_AP_01",
+        "capacity_mbps": 1000
+      }
+    ]
+  }
+}

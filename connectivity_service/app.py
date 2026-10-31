@@ -1,7 +1,18 @@
 """Connectivity Agent as a separate REST process.
 
-It validates incoming bodies with jsonschema against schemas/message-1.0.json,
-not the Python models, so the wire contract is what is actually enforced here.
+POST /messages takes a Bundle (schemas/bundle-1.0.json): `messages[0]` is the TASK
+addressed to this agent, the rest are the peer FINDINGs it may use, plus the
+`observations` and `topology` they cite. The reply is a Bundle too.
+
+Bodies are validated with jsonschema against schemas/bundle-1.0.json and, per
+message, schemas/message-1.0.json (format checker on), not the Python models, so
+the wire contract is what is actually enforced here. A bad Bundle or a bad TASK
+gets HTTP 400 and a Bundle holding a typed ERROR; a bad or duplicate peer message
+is dropped with an ERROR in the reply while the rest is still processed.
+
+Each Bundle is one delivery, like one orchestrator run: duplicate message IDs are
+detected inside a Bundle, and reply IDs restart at CONN-01, so re-running the same
+fixture (or its --control twin, which reuses the TASK ID) gets the same answer.
 
     uvicorn connectivity_service.app:app --port 8001
 
@@ -27,7 +38,7 @@ from netcoop.orchestrator.eventlog import EventLog
 AGENT_ID = "connectivity_agent"
 PROTOCOL = "netcoop/1.0"
 SUPPORTED_MAJOR = 1
-SCHEMA_PATH = Path(__file__).resolve().parents[1] / "schemas" / "message-1.0.json"
+SCHEMA_DIR = Path(__file__).resolve().parents[1] / "schemas"
 _VERSION_RE = re.compile(r"^netcoop/(\d+)\.(\d+)$")
 
 CARD: dict[str, Any] = {
@@ -41,7 +52,7 @@ CARD: dict[str, Any] = {
 
 
 class _Rejected(Exception):
-    def __init__(self, code: str, detail: str, field_path: Optional[str], status: int) -> None:
+    def __init__(self, code: str, detail: str, field_path: Optional[str], status: int = 400) -> None:
         super().__init__(detail)
         self.code, self.detail, self.field_path, self.status = code, detail, field_path, status
 
@@ -54,101 +65,173 @@ def _str_or(value: Any, default: Optional[str]) -> Optional[str]:
     return value if isinstance(value, str) and value else default
 
 
-def _field_path(error: ValidationError) -> str:
+def _validator(name: str) -> Draft202012Validator:
+    schema = json.loads((SCHEMA_DIR / name).read_text(encoding="utf-8"))
+    return Draft202012Validator(schema, format_checker=Draft202012Validator.FORMAT_CHECKER)
+
+
+def _field_path(error: ValidationError, prefix: str = "") -> Optional[str]:
     parts = [str(p) for p in error.absolute_path]
     if error.validator == "required" and isinstance(error.instance, dict):
         missing = [k for k in error.validator_value if k not in error.instance]
         parts += missing[:1]
-    return ".".join(parts)
+    return ".".join(([prefix] if prefix else []) + parts) or None
+
+
+def _schema_rejection(error: ValidationError, prefix: str = "") -> _Rejected:
+    code = "MISSING_FIELD" if error.validator == "required" else "INVALID_VALUE"
+    return _Rejected(code, error.message, _field_path(error, prefix))
+
+
+def _first_message(body: Any) -> Any:
+    """messages[0] if there is one, so an ERROR can be addressed to its sender."""
+    messages = body.get("messages") if isinstance(body, dict) else None
+    return messages[0] if isinstance(messages, list) and messages else None
+
+
+class _Delivery:
+    """State for one Bundle: messages seen and per-request reply/error counters."""
+
+    def __init__(self) -> None:
+        self.seen: set[str] = set()
+        self.errors: list[dict[str, Any]] = []
+        self.reply_count = 0
+        self.error_count = 0
 
 
 class ConnectivityService:
     def __init__(self, log: EventLog) -> None:
         self.log = log
-        self._validator = Draft202012Validator(json.loads(SCHEMA_PATH.read_text(encoding="utf-8")),
-                                               format_checker=Draft202012Validator.FORMAT_CHECKER)
-        self._envelope_fields = set(self._validator.schema["properties"])
-        self._seen: set[str] = set()
-        self._reply_count = 0
-        self._error_count = 0
+        self._bundle = _validator("bundle-1.0.json")
+        self._message = _validator("message-1.0.json")
+        self._envelope_fields = set(self._message.schema["properties"])
 
     def handle(self, raw_text: str) -> tuple[int, dict[str, Any]]:
+        """One Bundle in, (HTTP status, reply Bundle) out. Never raises on bad input."""
+        delivery = _Delivery()
         body: Any = None
         try:
             body = self._parse(raw_text)
-            message = self._check(body)
-            if message["message_id"] in self._seen:
-                raise _Rejected("DUPLICATE_MESSAGE",
-                                f"message_id {message['message_id']} already received; ignored",
-                                "message_id", 409)
+            raw_messages = self._check_bundle(body)
         except _Rejected as rej:
             self.log.record(body, valid=False, error=f"{rej.code}: {rej.detail}", body_json=raw_text)
-            return rej.status, self._error(body, rej)
+            return rej.status, {"messages": [self._error(delivery, _first_message(body), rej)]}
 
-        self._seen.add(message["message_id"])
-        self.log.record(body, valid=True, body_json=raw_text)
-        return 200, self._reply(message)
+        accepted: list[dict[str, Any]] = []
+        for i, raw in enumerate(raw_messages):
+            message = self._accept(delivery, raw, i)
+            if message is None and i == 0:  # nothing to do without a valid TASK
+                return 400, {"messages": delivery.errors}
+            if message is not None:
+                accepted.append(message)
+        return 200, {"messages": self._reply(delivery, accepted[0], accepted[1:]) + delivery.errors}
+
+    # ----------------------------------------------------------------- validation
 
     @staticmethod
     def _parse(raw_text: str) -> dict[str, Any]:
         try:
             body = json.loads(raw_text)
         except json.JSONDecodeError as exc:
-            raise _Rejected("MALFORMED_JSON", f"body is not valid JSON: {exc}", None, 400) from exc
+            raise _Rejected("MALFORMED_JSON", f"body is not valid JSON: {exc}", None) from exc
         if not isinstance(body, dict):
-            raise _Rejected("MALFORMED_JSON", "body must be a JSON object", None, 400)
+            raise _Rejected("MALFORMED_JSON", "body must be a JSON object (a Bundle)", None)
         return body
 
-    def _check(self, body: dict[str, Any]) -> dict[str, Any]:
+    def _check_bundle(self, body: dict[str, Any]) -> list[Any]:
+        """Bundle shape, observations and topology. Messages are checked one by one
+        afterwards, so a bad peer message cannot sink the whole delivery."""
+        if "messages" not in body:
+            raise _Rejected("MISSING_FIELD", "a Bundle needs 'messages' (TASK first, then peer messages)",
+                            "messages")
+        messages = body["messages"]
+        if not isinstance(messages, list) or not messages:
+            raise _Rejected("INVALID_VALUE", "'messages' must be a non-empty list, TASK first", "messages")
+        error = best_match(self._bundle.iter_errors({**body, "messages": []}))
+        if error is not None:
+            raise _schema_rejection(error)
+        return messages
+
+    def _accept(self, delivery: _Delivery, raw: Any, index: int) -> Optional[dict[str, Any]]:
+        """Validate and log messages[index]; a rejection becomes an ERROR in the reply."""
+        prefix = f"messages.{index}"
+        try:
+            message = self._check(raw, prefix)
+            if index == 0:
+                self._check_task(message, prefix)
+            if message["message_id"] in delivery.seen:
+                raise _Rejected("DUPLICATE_MESSAGE",
+                                f"message_id {message['message_id']} appears twice in this Bundle; ignored",
+                                f"{prefix}.message_id", 409)
+        except _Rejected as rej:
+            self.log.record(raw, valid=False, error=f"{rej.code}: {rej.detail}")
+            delivery.errors.append(self._error(delivery, raw, rej))
+            return None
+        delivery.seen.add(message["message_id"])
+        self.log.record(raw, valid=True)
+        return message
+
+    def _check(self, body: Any, prefix: str) -> dict[str, Any]:
         """Version gate, move unknown 1.x fields into `extra`, then JSON Schema validation."""
+        if not isinstance(body, dict):
+            raise _Rejected("INVALID_VALUE", "each message must be a JSON object", prefix)
         protocol = body.get("protocol")
         match = _VERSION_RE.match(protocol) if isinstance(protocol, str) else None
         if match and int(match.group(1)) != SUPPORTED_MAJOR:
             raise _Rejected("SCHEMA_VERSION_UNSUPPORTED",
                             f"{protocol} not supported; accepts netcoop/{SUPPORTED_MAJOR}.x",
-                            "protocol", 400)
+                            f"{prefix}.protocol")
         message = {k: v for k, v in body.items() if k in self._envelope_fields}
         unknown = {k: v for k, v in body.items() if k not in self._envelope_fields}
         if unknown:
             message["extra"] = {**(body.get("extra") or {}), **unknown}
-        error = best_match(self._validator.iter_errors(message))
+        error = best_match(self._message.iter_errors(message))
         if error is not None:
-            code = "MISSING_FIELD" if error.validator == "required" else "INVALID_VALUE"
-            raise _Rejected(code, error.message, _field_path(error) or None, 400)
+            raise _schema_rejection(error, prefix)
         return message
 
-    def _reply(self, message: dict[str, Any]) -> dict[str, Any]:
-        """Stub RESPONSE until the real connectivity analysis lands (Part 2)."""
-        self._reply_count += 1
-        payload = message["payload"]
+    @staticmethod
+    def _check_task(message: dict[str, Any], prefix: str) -> None:
+        if message["type"] != "TASK":
+            raise _Rejected("INVALID_VALUE", f"messages[0] must be the TASK, got {message['type']}",
+                            f"{prefix}.type")
+        if message["recipient"] != AGENT_ID:
+            raise _Rejected("UNKNOWN_RECIPIENT", f"TASK is addressed to {message['recipient']}, not {AGENT_ID}",
+                            f"{prefix}.recipient")
+
+    # ----------------------------------------------------------------- replies
+
+    def _reply(self, delivery: _Delivery, task: dict[str, Any], peers: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Stub RESPONSE to the TASK until the connectivity analysis lands (C3)."""
+        delivery.reply_count += 1
         reply = {
             "protocol": PROTOCOL,
-            "message_id": f"{message['incident_id']}-CONN-{self._reply_count:02d}",
-            "incident_id": message["incident_id"],
-            "in_reply_to": message["message_id"],
+            "message_id": f"{task['incident_id']}-CONN-{delivery.reply_count:02d}",
+            "incident_id": task["incident_id"],
+            "in_reply_to": task["message_id"],
             "sender": AGENT_ID,
-            "recipient": message["sender"],
+            "recipient": task["sender"],
             "type": "RESPONSE",
-            "timestamp": _now(),
+            "timestamp": task["timestamp"],      # incident clock, so replies are reproducible
             "payload": {
-                "query_id": payload.get("query_id") if message["type"] == "QUERY" else None,
+                "query_id": None,
                 "evidence_ids": [],
-                "answer": f"received {message['type']} {message['message_id']}; "
+                "answer": f"received TASK {task['message_id']} with {len(peers)} peer message(s); "
                           "connectivity analysis not implemented yet",
             },
             "extra": {},
         }
-        self._validator.validate(reply)
-        return reply
+        self._message.validate(reply)
+        return [reply]
 
-    def _error(self, body: Any, rej: _Rejected) -> dict[str, Any]:
-        self._error_count += 1
+    def _error(self, delivery: _Delivery, body: Any, rej: _Rejected) -> dict[str, Any]:
+        delivery.error_count += 1
         header = body if isinstance(body, dict) else {}
         incident_id = _str_or(header.get("incident_id"), "UNKNOWN")
         offending_id = _str_or(header.get("message_id"), None)
         error = {
             "protocol": PROTOCOL,
-            "message_id": f"{incident_id}-CONN-ERR-{self._error_count:02d}",
+            "message_id": f"{incident_id}-CONN-ERR-{delivery.error_count:02d}",
             "incident_id": incident_id,
             "in_reply_to": offending_id,
             "sender": AGENT_ID,
@@ -163,7 +246,7 @@ class ConnectivityService:
             },
             "extra": {},
         }
-        self._validator.validate(error)
+        self._message.validate(error)
         return error
 
 

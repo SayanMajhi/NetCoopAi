@@ -102,6 +102,14 @@ def client() -> TestClient:
     return TestClient(create_app(":memory:"))
 
 
+def post_as_peer(client: TestClient, body: dict[str, Any]) -> list[dict[str, Any]]:
+    """The REST service takes a Bundle: send `body` as a peer message behind a valid TASK."""
+    task = load("task.json")
+    resp = client.post("/messages", content=json.dumps({"messages": [task, body]}))
+    assert resp.status_code == 200, f"REST returned {resp.status_code}"
+    return resp.json()["messages"]
+
+
 @pytest.mark.parametrize("name", sorted(BAD_MESSAGES))
 def test_bad_message_rejected_everywhere(name: str, client: TestClient) -> None:
     body = BAD_MESSAGES[name]
@@ -110,9 +118,9 @@ def test_bad_message_rejected_everywhere(name: str, client: TestClient) -> None:
     assert list(MESSAGE_SCHEMA.iter_errors(body)), f"JSON Schema accepted: {name}"
     accepted, error = MessageBus().deliver(copy.deepcopy(body))
     assert accepted is None and error is not None, f"bus accepted: {name}"
-    resp = client.post("/messages", content=json.dumps({**body, "message_id": f"PARITY-{name}"}))
-    assert resp.status_code == 400, f"REST returned {resp.status_code} for: {name}"
-    assert resp.json()["type"] == "ERROR"
+    replies = post_as_peer(client, {**body, "message_id": f"PARITY-{name}"})
+    assert [m["type"] for m in replies] == ["RESPONSE", "ERROR"], f"REST accepted: {name}"
+    assert replies[1]["payload"]["offending_message_id"] == f"PARITY-{name}"
 
 
 @pytest.mark.parametrize("name", sorted(BAD_REPORTS))
@@ -136,8 +144,8 @@ def test_good_message_accepted_everywhere(name: str, client: TestClient) -> None
     body = load(name)
     Envelope.model_validate(copy.deepcopy(body))
     assert not list(MESSAGE_SCHEMA.iter_errors(body))
-    resp = client.post("/messages", content=json.dumps({**body, "message_id": f"PARITY-OK-{name}"}))
-    assert resp.status_code == 200 and resp.json()["type"] == "RESPONSE"
+    replies = post_as_peer(client, {**body, "message_id": f"PARITY-OK-{name}"})
+    assert [m["type"] for m in replies] == ["RESPONSE"], f"REST rejected: {name}"
 
 
 @pytest.mark.parametrize("name", ["report_diagnosed.json", "report_insufficient.json", "report_invalid_input.json"])

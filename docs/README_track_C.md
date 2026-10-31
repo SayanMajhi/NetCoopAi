@@ -146,34 +146,46 @@ $env:NETCOOP_CONNECTIVITY_DB="traces/connectivity.sqlite"; uvicorn connectivity_
 | Endpoint | What it does |
 |---|---|
 | `GET /card` | The agent card (same as `connectivity_agent` in `netcoop/protocol/cards.py`) |
-| `POST /messages` | Receives one `netcoop/1.0` message and replies with one message |
+| `POST /messages` | Receives a **Bundle** and replies with a Bundle (Phase 2, C2) |
 | `GET /events` | The event-log rows as JSON |
 
-`POST /messages` validates the body with **jsonschema against `schemas/message-1.0.json`**, not
-the Python models, so the generated wire contract is what is enforced. The JSON Schema is
-language-neutral, so a non-Python agent could be validated the same way.
+A Bundle (`schemas/bundle-1.0.json`) is `{"messages": [...], "observations": [...], "topology": {...}}`.
+`messages[0]` is the TASK addressed to `connectivity_agent`; the rest are the peer FINDINGs
+it may use. The service validates with **jsonschema** (format checker on): the Bundle against
+`schemas/bundle-1.0.json` and each message against `schemas/message-1.0.json`, not the Python
+models, so the generated wire contract is what is enforced.
 
-| Request | HTTP | Reply |
+| Request | HTTP | Reply Bundle holds |
 |---|---|---|
-| Valid message | 200 | `RESPONSE` with `in_reply_to` = the received `message_id`, addressed to the sender |
+| Valid Bundle | 200 | `RESPONSE` to the TASK (`in_reply_to` = TASK ID, addressed to its sender) |
 | Not JSON / not an object | 400 | `ERROR` `MALFORMED_JSON` |
-| Missing field | 400 | `ERROR` `MISSING_FIELD` + `field_path` |
-| Wrong type or enum value | 400 | `ERROR` `INVALID_VALUE` + `field_path` |
-| `netcoop/2.x` | 400 | `ERROR` `SCHEMA_VERSION_UNSUPPORTED` |
-| Repeated `message_id` | 409 | `ERROR` `DUPLICATE_MESSAGE`; ignored and logged |
+| No `messages` (e.g. a bare envelope) / empty list | 400 | `ERROR` `MISSING_FIELD` / `INVALID_VALUE`, `field_path` `messages` |
+| Bad observation / unknown top-level field | 400 | `ERROR` `INVALID_VALUE` + `field_path` (e.g. `observations.0.observed_at`) |
+| Bad TASK (missing field, bad value, `2.x`) | 400 | typed `ERROR`, `field_path` like `messages.0.sender` |
+| `messages[0]` not a TASK / TASK for another agent | 400 | `ERROR` `INVALID_VALUE` / `UNKNOWN_RECIPIENT` |
+| Bad or `2.x` peer message | 200 | `RESPONSE` to the TASK **plus** an `ERROR` for that peer (`messages.N...`); the peer is dropped |
+| Same `message_id` twice in one Bundle | 200 | `ERROR` `DUPLICATE_MESSAGE` for the repeat; ignored and logged |
 
-Unknown top-level fields from a `1.x` sender are moved into `extra`, as the protocol requires.
-Outgoing RESPONSE and ERROR messages are validated against the same schema before they are sent.
+Every message in the Bundle gets its own event-log row. Unknown top-level fields on a `1.x`
+message are moved into `extra`. Outgoing messages are validated against the schema before they
+are sent; the RESPONSE carries the TASK's timestamp (the incident clock) so runs are reproducible.
 
-Example:
+**Each Bundle is one delivery.** Message IDs are deterministic per fixture, so a re-run (or the
+`--control` run, which reuses the TASK ID) sends the same IDs again. Duplicates are therefore
+detected inside a Bundle, and reply IDs restart at `CONN-01` for every request.
+
+Example (from the repo root; `curl.exe` in PowerShell):
 
 ```bash
-curl -i -H "Content-Type: application/json" --data @docs/m1_curl/valid_finding.json localhost:8001/messages
+curl -i -H "Content-Type: application/json" --data @docs/m2_curl/bundle.json localhost:8001/messages
 ```
 
-**Current limit:** the RESPONSE is a stub. Its `answer` says "connectivity analysis not
-implemented yet" and `evidence_ids` is empty. Real topology, DNS/DHCP, reachability and
-peer-finding analysis is Part 2 work.
+`docs/m2_curl/bundle_bad_peer.json` is the same Bundle with `stance` removed from the peer FINDING.
+The Phase 1 proof (`docs/m1_curl/`) used single messages and no longer matches the endpoint.
+
+**Current limit:** the RESPONSE is a stub that reports how many peer messages it accepted.
+Real topology, DNS/DHCP, reachability and peer-finding analysis is C3
+(`connectivity_service/logic.py`).
 
 ## Tests
 
@@ -181,7 +193,7 @@ peer-finding analysis is Part 2 work.
 |---|---|---|
 | `tests/test_topology.py` | 8 | Topology integrity, shared upstream, generator IDs, one uplink per switch |
 | `tests/test_bus.py` | 13 | Valid, duplicate and invalid messages all logged; v2 unsupported; missing protocol; 1.x unknown fields; malformed JSON; payload field paths; resend after fix; file-backed log |
-| `tests/test_connectivity_service.py` | 11 | Card; valid → RESPONSE; missing field → typed ERROR; v2 unsupported; bad enum; malformed JSON; duplicate → 409; QUERY echoes `query_id`; 1.x extra fields; the 3 acceptance rows |
+| `tests/test_connectivity_service.py` | 21 | Card; Bundle in/out; reply uses incident clock and repeats identically; bare envelope, empty messages, bad observation, unknown field rejected; TASK checks (missing field, not a TASK, wrong recipient, bad timestamp, v2); bad/v2/duplicate peers dropped with ERROR while the TASK is answered; 1.x extra fields; every message logged |
 
 ```bash
 pytest -q
