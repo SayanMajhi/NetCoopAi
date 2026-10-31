@@ -1,0 +1,23 @@
+{
+  "protocol": "netcoop/1.0",
+  "message_id": "INC-0001-INF-02",
+  "incident_id": "INC-0001",
+  "in_reply_to": "INC-0001-ORCH-01",
+  "sender": "infrastructure_agent",
+  "recipient": "connectivity_agent",
+  "type": "FINDING",
+  "timestamp": "2026-10-31T10:30:00Z",
+  "payload": {
+    "finding_id": "F-INF-01",
+    "hypothesis": "link_congestion@HOSTEL_UPLINK_01",
+    "stance": "contradicts",
+    "target_hypothesis": "link_congestion@HOSTEL_UPLINK_01",
+    "evidence_ids": [
+      "EV-014"
+    ],
+    "reason": "Interface errors rise while utilization stays below baseline",
+    "score": 0.6,
+    "consumed_message_ids": []
+  },
+  "extra": {}
+}
