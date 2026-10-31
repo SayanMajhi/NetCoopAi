@@ -1,0 +1,31 @@
+{
+  "topology_version": "1.0",
+  "description": "Synthetic campus network: core router, hostel and department distribution, access layer, APs, DNS/DHCP server. HOSTEL_UPLINK_01 is the shared upstream for every hostel device.",
+  "nodes": [
+    {"id": "CORE_RTR_01",        "type": "router",              "zone": "core"},
+    {"id": "SRV_DNS_DHCP_01",    "type": "server",              "zone": "datacenter", "services": ["dns", "dhcp"]},
+    {"id": "HOSTEL_CORE_SW_01",  "type": "distribution_switch", "zone": "hostel"},
+    {"id": "HOSTEL_ACC_SW_01",   "type": "access_switch",       "zone": "hostel"},
+    {"id": "HOSTEL_ACC_SW_02",   "type": "access_switch",       "zone": "hostel"},
+    {"id": "HOSTEL_AP_01",       "type": "access_point",        "zone": "hostel"},
+    {"id": "HOSTEL_AP_02",       "type": "access_point",        "zone": "hostel"},
+    {"id": "DEPT_CORE_SW_01",    "type": "distribution_switch", "zone": "department"},
+    {"id": "DEPT_ACC_SW_01",     "type": "access_switch",       "zone": "department"},
+    {"id": "DEPT_ACC_SW_02",     "type": "access_switch",       "zone": "department"},
+    {"id": "DEPT_AP_01",         "type": "access_point",        "zone": "department"},
+    {"id": "DEPT_AP_02",         "type": "access_point",        "zone": "department"}
+  ],
+  "links": [
+    {"link_id": "HOSTEL_UPLINK_01",   "a": "CORE_RTR_01",       "b": "HOSTEL_CORE_SW_01", "capacity_mbps": 1000},
+    {"link_id": "DEPT_UPLINK_01",     "a": "CORE_RTR_01",       "b": "DEPT_CORE_SW_01",   "capacity_mbps": 1000},
+    {"link_id": "SRV_LINK_01",        "a": "CORE_RTR_01",       "b": "SRV_DNS_DHCP_01",   "capacity_mbps": 10000},
+    {"link_id": "HOSTEL_ACC_LINK_01", "a": "HOSTEL_CORE_SW_01", "b": "HOSTEL_ACC_SW_01",  "capacity_mbps": 1000},
+    {"link_id": "HOSTEL_ACC_LINK_02", "a": "HOSTEL_CORE_SW_01", "b": "HOSTEL_ACC_SW_02",  "capacity_mbps": 1000},
+    {"link_id": "HOSTEL_AP_LINK_01",  "a": "HOSTEL_ACC_SW_01",  "b": "HOSTEL_AP_01",      "capacity_mbps": 1000},
+    {"link_id": "HOSTEL_AP_LINK_02",  "a": "HOSTEL_ACC_SW_02",  "b": "HOSTEL_AP_02",      "capacity_mbps": 1000},
+    {"link_id": "DEPT_ACC_LINK_01",   "a": "DEPT_CORE_SW_01",   "b": "DEPT_ACC_SW_01",    "capacity_mbps": 1000},
+    {"link_id": "DEPT_ACC_LINK_02",   "a": "DEPT_CORE_SW_01",   "b": "DEPT_ACC_SW_02",    "capacity_mbps": 1000},
+    {"link_id": "DEPT_AP_LINK_01",    "a": "DEPT_ACC_SW_01",    "b": "DEPT_AP_01",        "capacity_mbps": 1000},
+    {"link_id": "DEPT_AP_LINK_02",    "a": "DEPT_ACC_SW_02",    "b": "DEPT_AP_02",        "capacity_mbps": 1000}
+  ]
+}
