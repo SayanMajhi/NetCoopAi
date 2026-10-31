@@ -82,3 +82,26 @@ def test_hostel_uplink_is_shared_upstream():
     others = {n["id"] for n in topo["nodes"]} - hostel
     assert hostel.isdisjoint(still_reachable)
     assert others <= still_reachable
+
+
+def test_every_generator_device_id_is_a_switch():
+    """The organizer generator emits SW_CAMPUS_1..10 (B3); each must map to a topology switch."""
+    topo = load_topology()
+    types = {n["id"]: n["type"] for n in topo["nodes"]}
+    for i in range(1, 11):
+        assert types.get(f"SW_CAMPUS_{i}") in {"distribution_switch", "access_switch"}
+
+
+def test_each_switch_has_exactly_one_uplink():
+    """Generator link_utilization_pct has no link ID; a unique uplink per switch lets the
+    normalizer attribute it without guessing."""
+    topo = load_topology()
+    parents = {"router": None, "distribution_switch": "router", "access_switch": "distribution_switch"}
+    types = {n["id"]: n["type"] for n in topo["nodes"]}
+    for switch, kind in types.items():
+        if kind not in ("distribution_switch", "access_switch"):
+            continue
+        uplinks = [l for l in topo["links"]
+                   if switch in (l["a"], l["b"])
+                   and types[l["b"] if l["a"] == switch else l["a"]] == parents[kind]]
+        assert len(uplinks) == 1, f"{switch} has {len(uplinks)} uplinks"
