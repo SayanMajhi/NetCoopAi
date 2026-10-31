@@ -7,10 +7,10 @@ Times are relative to T0 (hackathon start); 24-hour event. **Deadline: TBD — c
 
 | # | Phase | Window | Deliverable | Status |
 |---|---|---|---|---|
-| 1 | Data contract (M1) | T0 → T+3h | frozen `netcoop/1.0`, raw generator data + field mapping, topology, REST proof, labels, dashboard mock | **REJECTED (narrow) by AI 3** — fixes in `m1/sayan-phase1-fixes`, then re-review |
-| 2 | Specialist agents | T+3h → T+9h | normalizer, Performance, Infrastructure, Connectivity (REST, consumes peer findings), thresholds | NOT STARTED |
-| 3 | Correlation + report | T+7h → T+13h | `heuristic-v1`, decision gates, QUERY rounds (≤2), 0.9 compat, report actions + Markdown | NOT STARTED |
-| 4 | Robustness + evaluation | T+12h → T+17h | all 16 dev scenarios pass labels, held-out set, `netcoop eval` | NOT STARTED |
+| 1 | Data contract (M1) | T0 → T+3h | frozen `netcoop/1.0`, raw generator data + field mapping, topology, REST proof, labels, dashboard mock | **ACCEPTED** by AI 3 (`83d6a7c`, tag `contract-1.0.1`) |
+| 2 | Specialist agents | T+7h → T+11h (replanned) | normalizer, Performance, Infrastructure, Connectivity (REST, consumes peer findings), thresholds, `netcoop run` | **IN PROGRESS** — tasks: `docs/PHASE2_TASKS.md` |
+| 3 | Correlation + report | T+10h → T+14h (replanned) | `heuristic-v1`, decision gates, QUERY rounds (≤2), 0.9 compat, report actions + Markdown | NOT STARTED |
+| 4 | Robustness + evaluation | T+13h → T+17h | all 16 dev scenarios pass labels, held-out set, `netcoop eval` | NOT STARTED |
 | 5 | Dashboard (optional, encouraged) | T+10h → T+18h | event feed, ranking, evidence, report view on real runs | NOT STARTED |
 | 6 | Freeze + submission | T+18h → deadline | ARCHITECTURE/README final, demo video 3–5 min, rehearsal, repo tagged | NOT STARTED |
 
@@ -49,3 +49,5 @@ Feature freeze at **T+18h**: after that only fixes to mandatory requirements or 
 ## Check-in log
 - 2026-11-01 — Team rebuilt in https://github.com/SayanMajhi/NetCoopAi from a blank repo. All Phase 1 tasks (A, B, C, D) merged to `main` (`9b45a03`, PRs #1–#10). PM re-ran every check on a fresh clone: 69 passed, no schema drift, live REST proof, dashboard builds. Phase 1 → READY FOR REVIEW.
 - 2026-11-01 — AI 3: **REJECTED (narrow)**. Required: (1) architecture docs in repo, (2) schemas enforce model rules + parity test, (3) examples match topology/metrics, (4) tag `contract-1.0.1`. Fixes prepared on `m1/sayan-phase1-fixes`.
+- 2026-11-01 — Fixes merged in PR #11 (`83d6a7c`). Tagged **`contract-1.0.1` → `83d6a7c`** (`contract-1.0` left on `f0f4e94`). Fresh-clone re-run: 118 passed; regeneration clean; live REST rejects `bogus@X`, `yesterday`, no-timezone timestamps. Re-review pack sent to AI 3.
+- 2026-11-01 04:00 IST (≈T+7h) — **Phase 1 ACCEPTED by AI 3.** Phase 2 started ~4h behind the original plan; Phases 2–3 replanned to overlap. Deadline still unconfirmed (assumed T+24h ≈ 2026-11-01 20:50 IST).
