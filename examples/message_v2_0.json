@@ -1,0 +1,11 @@
+{
+  "protocol": "netcoop/2.0",
+  "message_id": "INC-0001-EXT-01",
+  "incident_id": "INC-0001",
+  "in_reply_to": null,
+  "sender": "future_agent",
+  "recipient": "correlation_agent",
+  "type": "FINDING",
+  "timestamp": "2026-10-31T10:30:00Z",
+  "payload": {"claims": []}
+}

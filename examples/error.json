@@ -1,0 +1,17 @@
+{
+  "protocol": "netcoop/1.0",
+  "message_id": "INC-0001-BUS-ERR-01",
+  "incident_id": "INC-0001",
+  "in_reply_to": "INC-0001-INF-03",
+  "sender": "orchestrator",
+  "recipient": "infrastructure_agent",
+  "type": "ERROR",
+  "timestamp": "2026-10-31T10:30:00Z",
+  "payload": {
+    "code": "MISSING_FIELD",
+    "detail": "Field required",
+    "field_path": "payload.stance",
+    "offending_message_id": "INC-0001-INF-03"
+  },
+  "extra": {}
+}

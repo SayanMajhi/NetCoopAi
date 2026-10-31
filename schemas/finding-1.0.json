@@ -1,0 +1,83 @@
+{
+  "$defs": {
+    "Stance": {
+      "enum": [
+        "supports",
+        "contradicts"
+      ],
+      "title": "Stance",
+      "type": "string"
+    }
+  },
+  "$id": "finding-1.0.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "consumed_message_ids": {
+      "description": "Peer messages interpreted to produce this finding",
+      "items": {
+        "type": "string"
+      },
+      "title": "Consumed Message Ids",
+      "type": "array"
+    },
+    "evidence_ids": {
+      "description": "Canonical evidence IDs cited",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Evidence Ids",
+      "type": "array"
+    },
+    "finding_id": {
+      "description": "e.g. F-PERF-01",
+      "title": "Finding Id",
+      "type": "string"
+    },
+    "hypothesis": {
+      "description": "<cause>@<device_or_link_id>",
+      "pattern": "^[a-z_]+@[A-Za-z0-9_.:\\-]+$",
+      "title": "Hypothesis",
+      "type": "string"
+    },
+    "reason": {
+      "minLength": 1,
+      "title": "Reason",
+      "type": "string"
+    },
+    "score": {
+      "anyOf": [
+        {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Agent-local signal fit [0,1]",
+      "title": "Score"
+    },
+    "stance": {
+      "$ref": "#/$defs/Stance"
+    },
+    "target_hypothesis": {
+      "pattern": "^[a-z_]+@[A-Za-z0-9_.:\\-]+$",
+      "title": "Target Hypothesis",
+      "type": "string"
+    }
+  },
+  "required": [
+    "finding_id",
+    "hypothesis",
+    "stance",
+    "target_hypothesis",
+    "evidence_ids",
+    "reason"
+  ],
+  "title": "FindingPayload",
+  "type": "object"
+}

@@ -1,0 +1,18 @@
+{
+  "protocol": "netcoop/1.0",
+  "message_id": "INC-0001-CORR-01",
+  "incident_id": "INC-0001",
+  "in_reply_to": "INC-0001-INF-02",
+  "sender": "correlation_agent",
+  "recipient": "performance_agent",
+  "type": "QUERY",
+  "timestamp": "2026-10-31T10:30:00Z",
+  "payload": {
+    "query_id": "Q-01",
+    "question": "Is utilization on the uplink sustained above threshold, or a single spike?",
+    "target_id": "HOSTEL_UPLINK_01",
+    "desired_measurement": "link_utilization_pct",
+    "related_hypotheses": ["link_congestion@HOSTEL_UPLINK_01", "interface_fault@HOSTEL_UPLINK_01"]
+  },
+  "extra": {}
+}

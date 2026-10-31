@@ -1,0 +1,551 @@
+{
+  "$defs": {
+    "DecisionPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "decision_id": {
+          "title": "Decision Id",
+          "type": "string"
+        },
+        "limitations": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Limitations",
+          "type": "array"
+        },
+        "ranking": {
+          "items": {
+            "$ref": "#/$defs/RankedCause"
+          },
+          "title": "Ranking",
+          "type": "array"
+        },
+        "status": {
+          "$ref": "#/$defs/Status"
+        }
+      },
+      "required": [
+        "decision_id",
+        "status"
+      ],
+      "title": "DecisionPayload",
+      "type": "object"
+    },
+    "ErrorCode": {
+      "enum": [
+        "SCHEMA_VERSION_UNSUPPORTED",
+        "MISSING_FIELD",
+        "INVALID_VALUE",
+        "MALFORMED_JSON",
+        "DUPLICATE_MESSAGE",
+        "UNKNOWN_EVIDENCE",
+        "UNKNOWN_RECIPIENT",
+        "AGENT_TIMEOUT",
+        "AGENT_FAILURE"
+      ],
+      "title": "ErrorCode",
+      "type": "string"
+    },
+    "ErrorPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/ErrorCode"
+        },
+        "detail": {
+          "title": "Detail",
+          "type": "string"
+        },
+        "field_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Field Path"
+        },
+        "offending_message_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Offending Message Id"
+        }
+      },
+      "required": [
+        "code",
+        "detail"
+      ],
+      "title": "ErrorPayload",
+      "type": "object"
+    },
+    "FindingPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "consumed_message_ids": {
+          "description": "Peer messages interpreted to produce this finding",
+          "items": {
+            "type": "string"
+          },
+          "title": "Consumed Message Ids",
+          "type": "array"
+        },
+        "evidence_ids": {
+          "description": "Canonical evidence IDs cited",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "finding_id": {
+          "description": "e.g. F-PERF-01",
+          "title": "Finding Id",
+          "type": "string"
+        },
+        "hypothesis": {
+          "description": "<cause>@<device_or_link_id>",
+          "pattern": "^[a-z_]+@[A-Za-z0-9_.:\\-]+$",
+          "title": "Hypothesis",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "score": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Agent-local signal fit [0,1]",
+          "title": "Score"
+        },
+        "stance": {
+          "$ref": "#/$defs/Stance"
+        },
+        "target_hypothesis": {
+          "pattern": "^[a-z_]+@[A-Za-z0-9_.:\\-]+$",
+          "title": "Target Hypothesis",
+          "type": "string"
+        }
+      },
+      "required": [
+        "finding_id",
+        "hypothesis",
+        "stance",
+        "target_hypothesis",
+        "evidence_ids",
+        "reason"
+      ],
+      "title": "FindingPayload",
+      "type": "object"
+    },
+    "MessageType": {
+      "enum": [
+        "TASK",
+        "FINDING",
+        "QUERY",
+        "RESPONSE",
+        "DECISION",
+        "ERROR"
+      ],
+      "title": "MessageType",
+      "type": "string"
+    },
+    "QueryPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "desired_measurement": {
+          "description": "Canonical metric or service check name",
+          "title": "Desired Measurement",
+          "type": "string"
+        },
+        "query_id": {
+          "title": "Query Id",
+          "type": "string"
+        },
+        "question": {
+          "minLength": 1,
+          "title": "Question",
+          "type": "string"
+        },
+        "related_hypotheses": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Related Hypotheses",
+          "type": "array"
+        },
+        "target_id": {
+          "description": "Device or link ID to check",
+          "title": "Target Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "query_id",
+        "question",
+        "target_id",
+        "desired_measurement"
+      ],
+      "title": "QueryPayload",
+      "type": "object"
+    },
+    "RankedCause": {
+      "additionalProperties": false,
+      "properties": {
+        "confidence": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "contradicting_finding_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Contradicting Finding Ids",
+          "type": "array"
+        },
+        "coverage": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Coverage",
+          "type": "number"
+        },
+        "hypothesis": {
+          "pattern": "^[a-z_]+@[A-Za-z0-9_.:\\-]+$",
+          "title": "Hypothesis",
+          "type": "string"
+        },
+        "supporting_finding_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Supporting Finding Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "hypothesis",
+        "confidence",
+        "coverage"
+      ],
+      "title": "RankedCause",
+      "type": "object"
+    },
+    "ResponsePayload": {
+      "additionalProperties": false,
+      "properties": {
+        "answer": {
+          "default": "",
+          "title": "Answer",
+          "type": "string"
+        },
+        "evidence_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "query_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Query answered, if any",
+          "title": "Query Id"
+        }
+      },
+      "title": "ResponsePayload",
+      "type": "object"
+    },
+    "Stance": {
+      "enum": [
+        "supports",
+        "contradicts"
+      ],
+      "title": "Stance",
+      "type": "string"
+    },
+    "Status": {
+      "enum": [
+        "diagnosed",
+        "probable",
+        "healthy",
+        "insufficient_evidence",
+        "invalid_input",
+        "failed"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "TaskPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "capability": {
+          "description": "Capability requested, must match an agent card",
+          "title": "Capability",
+          "type": "string"
+        },
+        "evidence_ids": {
+          "description": "Evidence the agent may read",
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "instructions": {
+          "default": "",
+          "title": "Instructions",
+          "type": "string"
+        },
+        "peer_message_ids": {
+          "description": "Peer FINDING message IDs forwarded for interpretation",
+          "items": {
+            "type": "string"
+          },
+          "title": "Peer Message Ids",
+          "type": "array"
+        },
+        "scope_ids": {
+          "description": "Device/link IDs in scope",
+          "items": {
+            "type": "string"
+          },
+          "title": "Scope Ids",
+          "type": "array"
+        },
+        "task_id": {
+          "description": "Deterministic task ID, e.g. INC-0001-T-PERF-01",
+          "title": "Task Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "capability"
+      ],
+      "title": "TaskPayload",
+      "type": "object"
+    }
+  },
+  "$id": "message-1.0.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "TASK"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/TaskPayload"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "FINDING"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/FindingPayload"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "QUERY"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/QueryPayload"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "RESPONSE"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/ResponsePayload"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "DECISION"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/DecisionPayload"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "ERROR"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/ErrorPayload"
+          }
+        }
+      }
+    }
+  ],
+  "properties": {
+    "extra": {
+      "additionalProperties": true,
+      "description": "Unknown optional fields preserved from compatible 1.x senders",
+      "title": "Extra",
+      "type": "object"
+    },
+    "in_reply_to": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "null only for a new incident or an unsolicited finding",
+      "title": "In Reply To"
+    },
+    "incident_id": {
+      "minLength": 1,
+      "title": "Incident Id",
+      "type": "string"
+    },
+    "message_id": {
+      "description": "Deterministic, unique per incident",
+      "minLength": 1,
+      "title": "Message Id",
+      "type": "string"
+    },
+    "payload": {
+      "additionalProperties": true,
+      "title": "Payload",
+      "type": "object"
+    },
+    "protocol": {
+      "description": "Protocol and version",
+      "pattern": "^netcoop/\\d+\\.\\d+$",
+      "title": "Protocol",
+      "type": "string"
+    },
+    "recipient": {
+      "title": "Recipient",
+      "type": "string"
+    },
+    "sender": {
+      "title": "Sender",
+      "type": "string"
+    },
+    "timestamp": {
+      "description": "UTC, ISO 8601",
+      "format": "date-time",
+      "title": "Timestamp",
+      "type": "string"
+    },
+    "type": {
+      "$ref": "#/$defs/MessageType"
+    }
+  },
+  "required": [
+    "protocol",
+    "message_id",
+    "incident_id",
+    "in_reply_to",
+    "sender",
+    "recipient",
+    "type",
+    "timestamp",
+    "payload"
+  ],
+  "title": "Envelope",
+  "type": "object"
+}

@@ -1,0 +1,240 @@
+{
+  "$defs": {
+    "Envelope": {
+      "additionalProperties": false,
+      "properties": {
+        "extra": {
+          "additionalProperties": true,
+          "description": "Unknown optional fields preserved from compatible 1.x senders",
+          "title": "Extra",
+          "type": "object"
+        },
+        "in_reply_to": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "null only for a new incident or an unsolicited finding",
+          "title": "In Reply To"
+        },
+        "incident_id": {
+          "minLength": 1,
+          "title": "Incident Id",
+          "type": "string"
+        },
+        "message_id": {
+          "description": "Deterministic, unique per incident",
+          "minLength": 1,
+          "title": "Message Id",
+          "type": "string"
+        },
+        "payload": {
+          "additionalProperties": true,
+          "title": "Payload",
+          "type": "object"
+        },
+        "protocol": {
+          "description": "Protocol and version",
+          "pattern": "^netcoop/\\d+\\.\\d+$",
+          "title": "Protocol",
+          "type": "string"
+        },
+        "recipient": {
+          "title": "Recipient",
+          "type": "string"
+        },
+        "sender": {
+          "title": "Sender",
+          "type": "string"
+        },
+        "timestamp": {
+          "description": "UTC, ISO 8601",
+          "format": "date-time",
+          "title": "Timestamp",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/MessageType"
+        }
+      },
+      "required": [
+        "protocol",
+        "message_id",
+        "incident_id",
+        "in_reply_to",
+        "sender",
+        "recipient",
+        "type",
+        "timestamp",
+        "payload"
+      ],
+      "title": "Envelope",
+      "type": "object"
+    },
+    "MessageType": {
+      "enum": [
+        "TASK",
+        "FINDING",
+        "QUERY",
+        "RESPONSE",
+        "DECISION",
+        "ERROR"
+      ],
+      "title": "MessageType",
+      "type": "string"
+    },
+    "Observation": {
+      "additionalProperties": false,
+      "properties": {
+        "device_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Device Id"
+        },
+        "evidence_id": {
+          "description": "e.g. EV-014, deterministic per fixture",
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "link_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Link Id"
+        },
+        "metric": {
+          "description": "Canonical metric name, see PROTOCOL.md",
+          "title": "Metric",
+          "type": "string"
+        },
+        "normalization_steps": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Normalization Steps",
+          "type": "array"
+        },
+        "observed_at": {
+          "format": "date-time",
+          "title": "Observed At",
+          "type": "string"
+        },
+        "original_field": {
+          "title": "Original Field",
+          "type": "string"
+        },
+        "original_value": {
+          "default": null,
+          "title": "Original Value"
+        },
+        "quality_flags": {
+          "items": {
+            "$ref": "#/$defs/QualityFlag"
+          },
+          "title": "Quality Flags",
+          "type": "array"
+        },
+        "source_id": {
+          "description": "Raw sensor/probe identity, e.g. switch-telemetry",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "unit": {
+          "title": "Unit",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "null when missing/malformed \u2014 never 0",
+          "title": "Value"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "source_id",
+        "observed_at",
+        "metric",
+        "value",
+        "unit",
+        "original_field"
+      ],
+      "title": "Observation",
+      "type": "object"
+    },
+    "QualityFlag": {
+      "enum": [
+        "ok",
+        "missing",
+        "stale",
+        "malformed",
+        "counter_reset",
+        "unit_converted",
+        "derived",
+        "alias_mapped",
+        "out_of_window"
+      ],
+      "title": "QualityFlag",
+      "type": "string"
+    }
+  },
+  "$id": "bundle-1.0.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "HTTP body for out-of-process agents: the messages being delivered plus the\nevidence and topology they may cite. Responses use the same shape.",
+  "properties": {
+    "messages": {
+      "items": {
+        "$ref": "#/$defs/Envelope"
+      },
+      "title": "Messages",
+      "type": "array"
+    },
+    "observations": {
+      "items": {
+        "$ref": "#/$defs/Observation"
+      },
+      "title": "Observations",
+      "type": "array"
+    },
+    "topology": {
+      "additionalProperties": true,
+      "title": "Topology",
+      "type": "object"
+    }
+  },
+  "required": [
+    "messages"
+  ],
+  "title": "Bundle",
+  "type": "object"
+}

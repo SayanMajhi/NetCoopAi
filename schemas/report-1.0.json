@@ -1,0 +1,192 @@
+{
+  "$defs": {
+    "EvidenceItem": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence_id": {
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "metric": {
+          "title": "Metric",
+          "type": "string"
+        },
+        "source_id": {
+          "title": "Source Id",
+          "type": "string"
+        },
+        "unit": {
+          "title": "Unit",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Value"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "metric",
+        "value",
+        "unit",
+        "source_id"
+      ],
+      "title": "EvidenceItem",
+      "type": "object"
+    },
+    "Status": {
+      "enum": [
+        "diagnosed",
+        "probable",
+        "healthy",
+        "insufficient_evidence",
+        "invalid_input",
+        "failed"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "$id": "report-1.0.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "affected_devices": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Affected Devices",
+      "type": "array"
+    },
+    "affected_segments": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Affected Segments",
+      "type": "array"
+    },
+    "agent_findings": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Agent Findings",
+      "type": "array"
+    },
+    "agent_trace_id": {
+      "title": "Agent Trace Id",
+      "type": "string"
+    },
+    "alternative_causes": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Alternative Causes",
+      "type": "array"
+    },
+    "confidence": {
+      "anyOf": [
+        {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Confidence"
+    },
+    "confidence_method": {
+      "default": "heuristic-v1",
+      "title": "Confidence Method",
+      "type": "string"
+    },
+    "evidence_sources": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Evidence Sources",
+      "type": "array"
+    },
+    "incident_id": {
+      "title": "Incident Id",
+      "type": "string"
+    },
+    "limitations": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Limitations",
+      "type": "array"
+    },
+    "normalization_log": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Normalization Log",
+      "type": "array"
+    },
+    "recommended_actions": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Recommended Actions",
+      "type": "array"
+    },
+    "signature_version": {
+      "title": "Signature Version",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/Status"
+    },
+    "supporting_evidence": {
+      "items": {
+        "$ref": "#/$defs/EvidenceItem"
+      },
+      "title": "Supporting Evidence",
+      "type": "array"
+    },
+    "suspected_root_cause": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Suspected Root Cause"
+    },
+    "validation_errors": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Validation Errors",
+      "type": "array"
+    }
+  },
+  "required": [
+    "incident_id",
+    "status",
+    "suspected_root_cause",
+    "confidence",
+    "signature_version",
+    "agent_trace_id"
+  ],
+  "title": "Report",
+  "type": "object"
+}

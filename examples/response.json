@@ -1,0 +1,16 @@
+{
+  "protocol": "netcoop/1.0",
+  "message_id": "INC-0001-PERF-02",
+  "incident_id": "INC-0001",
+  "in_reply_to": "INC-0001-CORR-01",
+  "sender": "performance_agent",
+  "recipient": "correlation_agent",
+  "type": "RESPONSE",
+  "timestamp": "2026-10-31T10:30:00Z",
+  "payload": {
+    "query_id": "Q-01",
+    "evidence_ids": ["EV-011", "EV-015", "EV-016"],
+    "answer": "Utilization above threshold for 4 consecutive samples"
+  },
+  "extra": {}
+}

@@ -1,0 +1,18 @@
+{
+  "_note": "PROPOSED netcoop/0.9 dialect (Lead to confirm). Must FAIL 1.0 validation and be upgraded by protocol/compat.py.",
+  "protocol": "netcoop/0.9",
+  "msg_id": "INC-0001-INF-09",
+  "incident": "INC-0001",
+  "from": "infrastructure_agent",
+  "to": "correlation_agent",
+  "kind": "finding",
+  "ts": 1793356200,
+  "body": {
+    "id": "F-INF-09",
+    "cause": "interface_fault",
+    "target": "HOSTEL_UPLINK_01",
+    "supports": true,
+    "evidence": ["EV-014"],
+    "why": "CRC errors rising"
+  }
+}

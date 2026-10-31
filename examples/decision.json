@@ -1,0 +1,22 @@
+{
+  "protocol": "netcoop/1.0",
+  "message_id": "INC-0001-CORR-02",
+  "incident_id": "INC-0001",
+  "in_reply_to": "INC-0001-ORCH-04",
+  "sender": "correlation_agent",
+  "recipient": "reporting_agent",
+  "type": "DECISION",
+  "timestamp": "2026-10-31T10:30:00Z",
+  "payload": {
+    "decision_id": "INC-0001-DEC-01",
+    "status": "diagnosed",
+    "ranking": [
+      {"hypothesis": "link_congestion@HOSTEL_UPLINK_01", "confidence": 0.81, "coverage": 0.9,
+       "supporting_finding_ids": ["F-PERF-01", "F-CONN-01"], "contradicting_finding_ids": ["F-INF-01"]},
+      {"hypothesis": "interface_fault@HOSTEL_UPLINK_01", "confidence": 0.42, "coverage": 0.8,
+       "supporting_finding_ids": ["F-INF-01"], "contradicting_finding_ids": []}
+    ],
+    "limitations": ["Upstream utilization not measured"]
+  },
+  "extra": {}
+}

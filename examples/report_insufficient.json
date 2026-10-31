@@ -1,0 +1,19 @@
+{
+  "incident_id": "INC-0007",
+  "status": "insufficient_evidence",
+  "suspected_root_cause": null,
+  "confidence": 0.38,
+  "confidence_method": "heuristic-v1",
+  "signature_version": "1.0",
+  "affected_devices": [],
+  "affected_segments": [],
+  "supporting_evidence": [],
+  "agent_findings": ["F-INF-01", "F-PERF-01"],
+  "alternative_causes": ["link_congestion@HOSTEL_UPLINK_01", "interface_fault@HOSTEL_UPLINK_01"],
+  "recommended_actions": ["Collect 5 more minutes of interface counters on HOSTEL_UPLINK_01"],
+  "evidence_sources": ["infrastructure_agent", "performance_agent"],
+  "limitations": ["Top two causes within 0.15", "Queue counters stale"],
+  "normalization_log": [],
+  "validation_errors": [],
+  "agent_trace_id": "INC-0007-TRACE"
+}

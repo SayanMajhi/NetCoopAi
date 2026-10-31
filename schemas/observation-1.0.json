@@ -1,0 +1,123 @@
+{
+  "$defs": {
+    "QualityFlag": {
+      "enum": [
+        "ok",
+        "missing",
+        "stale",
+        "malformed",
+        "counter_reset",
+        "unit_converted",
+        "derived",
+        "alias_mapped",
+        "out_of_window"
+      ],
+      "title": "QualityFlag",
+      "type": "string"
+    }
+  },
+  "$id": "observation-1.0.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "device_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Device Id"
+    },
+    "evidence_id": {
+      "description": "e.g. EV-014, deterministic per fixture",
+      "title": "Evidence Id",
+      "type": "string"
+    },
+    "link_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Link Id"
+    },
+    "metric": {
+      "description": "Canonical metric name, see PROTOCOL.md",
+      "title": "Metric",
+      "type": "string"
+    },
+    "normalization_steps": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Normalization Steps",
+      "type": "array"
+    },
+    "observed_at": {
+      "format": "date-time",
+      "title": "Observed At",
+      "type": "string"
+    },
+    "original_field": {
+      "title": "Original Field",
+      "type": "string"
+    },
+    "original_value": {
+      "default": null,
+      "title": "Original Value"
+    },
+    "quality_flags": {
+      "items": {
+        "$ref": "#/$defs/QualityFlag"
+      },
+      "title": "Quality Flags",
+      "type": "array"
+    },
+    "source_id": {
+      "description": "Raw sensor/probe identity, e.g. switch-telemetry",
+      "title": "Source Id",
+      "type": "string"
+    },
+    "unit": {
+      "title": "Unit",
+      "type": "string"
+    },
+    "value": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "null when missing/malformed \u2014 never 0",
+      "title": "Value"
+    }
+  },
+  "required": [
+    "evidence_id",
+    "source_id",
+    "observed_at",
+    "metric",
+    "value",
+    "unit",
+    "original_field"
+  ],
+  "title": "Observation",
+  "type": "object"
+}

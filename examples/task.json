@@ -1,0 +1,19 @@
+{
+  "protocol": "netcoop/1.0",
+  "message_id": "INC-0001-ORCH-03",
+  "incident_id": "INC-0001",
+  "in_reply_to": null,
+  "sender": "orchestrator",
+  "recipient": "connectivity_agent",
+  "type": "TASK",
+  "timestamp": "2026-10-31T10:30:00Z",
+  "payload": {
+    "task_id": "INC-0001-T-CONN",
+    "capability": "interpret_peer_findings",
+    "scope_ids": ["HOSTEL_CORE_SW_01"],
+    "evidence_ids": [],
+    "peer_message_ids": ["INC-0001-PERF-01", "INC-0001-INF-02"],
+    "instructions": ""
+  },
+  "extra": {}
+}

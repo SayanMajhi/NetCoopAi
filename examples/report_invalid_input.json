@@ -1,0 +1,19 @@
+{
+  "incident_id": "INC-0009",
+  "status": "invalid_input",
+  "suspected_root_cause": null,
+  "confidence": null,
+  "confidence_method": "heuristic-v1",
+  "signature_version": "1.0",
+  "affected_devices": [],
+  "affected_segments": [],
+  "supporting_evidence": [],
+  "agent_findings": [],
+  "alternative_causes": [],
+  "recommended_actions": ["Fix the input file and re-run"],
+  "evidence_sources": [],
+  "limitations": [],
+  "normalization_log": [],
+  "validation_errors": ["missing required field 'records'"],
+  "agent_trace_id": "INC-0009-TRACE"
+}

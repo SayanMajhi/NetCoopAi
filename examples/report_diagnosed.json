@@ -1,0 +1,23 @@
+{
+  "incident_id": "INC-0001",
+  "status": "diagnosed",
+  "suspected_root_cause": "link_congestion@HOSTEL_UPLINK_01",
+  "confidence": 0.81,
+  "confidence_method": "heuristic-v1",
+  "signature_version": "1.0",
+  "affected_devices": ["HOSTEL_CORE_SW_01"],
+  "affected_segments": ["HOSTEL_UPLINK_01"],
+  "supporting_evidence": [
+    {"evidence_id": "EV-011", "metric": "link_utilization_pct", "value": 94, "unit": "percent", "source_id": "switch-telemetry"},
+    {"evidence_id": "EV-012", "metric": "latency_ms", "value": 280, "unit": "ms", "source_id": "client-probe"},
+    {"evidence_id": "EV-013", "metric": "queue_drops_per_min", "value": 160, "unit": "packets/min", "source_id": "switch-telemetry"}
+  ],
+  "agent_findings": ["F-CONN-01", "F-INF-01", "F-PERF-01"],
+  "alternative_causes": ["interface_fault@HOSTEL_UPLINK_01"],
+  "recommended_actions": ["Inspect egress queue and upstream utilization"],
+  "evidence_sources": ["connectivity_agent", "infrastructure_agent", "performance_agent"],
+  "limitations": ["Upstream utilization not measured"],
+  "normalization_log": ["rtt_sec 0.28 -> latency_ms 280"],
+  "validation_errors": [],
+  "agent_trace_id": "INC-0001-TRACE"
+}
