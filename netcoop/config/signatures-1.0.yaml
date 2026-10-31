@@ -41,48 +41,98 @@ signatures:
     required:
       - {metric: rssi_dbm, check: weak_or_grey_zone}
       - {metric: retry_rate_pct, check: above_warn}
-      - {probe: ap_uplink, check: healthy}
+      - {metric: packet_loss_pct, scope: ap_uplink, check: below_warn}
     corroborating:
       min_matches: 0
       checks:
         - {metric: packet_loss_pct, check: above_warn}
     contradicting:
-      - {probe: ap_uplink, check: unhealthy}
+      - {metric: packet_loss_pct, scope: ap_uplink, check: above_warn}
+      - {metric: link_utilization_pct, scope: ap_uplink, check: sustained_above_critical}
 
   interface_fault:
     required:
       - any_of:
           - {metric: interface_errors, check: rising_delta}
           - {metric: link_flap_count, check: rising_delta}
-      - {metric: packet_loss_pct, check: downstream_above_warn}
+      - {metric: packet_loss_pct, scope: downstream, check: above_warn}
     corroborating:
       min_matches: 0
       checks:
         - {metric: interface_oper_status, check: down_or_flapping}
     contradicting:
-      - {metric: packet_loss_pct, check: normal_downstream}
+      - {metric: packet_loss_pct, scope: downstream, check: below_warn}
 
   dns_failure:
     required:
-      - {probe: dns_lookup, check: failed}
-      - {probe: ip_path, check: reachable}
+      - {metric: dns_success, check: failed}
+      - {metric: reachability, scope: dns_server, check: reachable}
     corroborating:
       min_matches: 0
       checks:
-        - {probe: dns_lookup_multiple_clients, check: failed}
+        - {metric: dns_success, scope: multiple_clients, check: failed}
     contradicting:
-      - {probe: ip_path, check: unreachable}
+      - {metric: reachability, scope: dns_server, check: unreachable}
 
   dhcp_failure:
     required:
-      - {probe: dhcp_lease, check: failed}
-      - {probe: dhcp_server_path, check: reachable}
+      - {metric: dhcp_success, check: failed}
+      - {metric: reachability, scope: dhcp_server, check: reachable}
     corroborating:
       min_matches: 0
       checks:
-        - {probe: dhcp_lease_multiple_clients, check: failed}
+        - {metric: dhcp_success, scope: multiple_clients, check: failed}
     contradicting:
-      - {probe: dhcp_server_path, check: unreachable}
+      - {metric: reachability, scope: dhcp_server, check: unreachable}
+
+  hardware_failure:
+    required:
+      - any_of:
+          - {metric: interface_oper_status, check: down_or_flapping}
+          - {metric: reachability, check: unreachable}
+    corroborating:
+      min_matches: 1
+      checks:
+        - {metric: packet_loss_pct, check: above_critical}
+        - {metric: interface_errors, check: rising_delta}
+        - {metric: cpu_pct, check: above_critical}
+    contradicting:
+      - {metric: reachability, check: reachable}
+
+  device_overload:
+    required:
+      - any_of:
+          - {metric: cpu_pct, check: sustained_above_critical}
+          - {metric: memory_pct, check: sustained_above_critical}
+    corroborating:
+      min_matches: 1
+      checks:
+        - {metric: latency_ms, check: above_warn}
+        - {metric: queue_drops, check: rising_delta}
+    contradicting:
+      - {metric: cpu_pct, check: below_warn}
+
+# Frozen vocabulary. Agents, orchestrator, config and tests must use exactly these names.
+# Every `metric` above must be owned by an agent card (netcoop/protocol/cards.py).
+vocabulary:
+  checks:
+    sustained_above_critical: "value above critical for >= window.congestion_min_consecutive_samples samples"
+    above_critical: "latest valid value above critical"
+    above_warn: "latest valid value above warn"
+    below_warn: "latest valid value at or below warn"
+    rising_delta: "positive per-interval counter delta; negative delta is a counter reset, not evidence"
+    weak_or_grey_zone: "rssi_dbm at or below rssi.grey_zone_dbm.upper_exclusive"
+    down_or_flapping: "interface_oper_status down, or link_flap_count rising"
+    failed: "service check reports failure (dns_success / dhcp_success = false)"
+    reachable: "reachability = true"
+    unreachable: "reachability = false"
+  scopes:
+    target: "the device or link named in the hypothesis (default when scope is omitted)"
+    ap_uplink: "the link from the access point to its switch, from topology.json"
+    downstream: "devices behind the target in topology.json"
+    dns_server: "nodes with service dns in topology.json"
+    dhcp_server: "nodes with service dhcp in topology.json"
+    multiple_clients: "the same check observed on >= 2 distinct client devices"
 
 healthy_coverage:
   require_fresh_performance_measurements: true
