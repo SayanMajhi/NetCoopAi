@@ -212,7 +212,10 @@ def test_unreachable_devices_behind_a_reachable_switch_blame_that_switch() -> No
     obs = observations([("SW_CAMPUS_3", "reachability", [False] * 3), ("SW_CAMPUS_4", "reachability", [False] * 3),
                         ("SW_CAMPUS_1", "reachability", [True] * 3)])
     payloads, _ = run(obs)
-    assert hyps(payloads) == ["upstream_dependency@SW_CAMPUS_1"]
+    # The switch that still answers stays the shared suspect; each silent switch is also nominated as a
+    # failed device, so Correlation can weigh both readings instead of reporting nothing.
+    assert sorted(hyps(payloads)) == ["hardware_failure@SW_CAMPUS_3", "hardware_failure@SW_CAMPUS_4",
+                                      "upstream_dependency@SW_CAMPUS_1"]
 
 
 def test_unreachable_distribution_switch_blames_its_uplink() -> None:
