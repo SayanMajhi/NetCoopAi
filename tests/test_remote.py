@@ -184,7 +184,7 @@ def test_pipeline_over_http_traces_bodies_and_control_differs() -> None:
 def test_pipeline_with_unreachable_agent_reports_connectivity_unreachable() -> None:
     result = _pipeline(lambda b: send_bundle(b, "http://127.0.0.1:9", timeout=0.5))
     Report.model_validate(result.report.model_dump(mode="json"))
-    assert result.report.status == "insufficient_evidence"
+    assert result.report.status in ("probable", "insufficient_evidence")   # never diagnosed without Connectivity
     assert any("connectivity_unreachable" in lim for lim in result.report.limitations)
     errors = [m for m in result.messages if m.type == MessageType.ERROR.value and m.sender == "orchestrator"]
     assert errors and errors[0].payload["code"] == "AGENT_TIMEOUT"

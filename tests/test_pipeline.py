@@ -108,9 +108,10 @@ def by_sender(result, sender: str) -> list[Envelope]:
 def test_end_to_end_report_is_schema_valid() -> None:
     result = run()
     Report.model_validate(result.report.model_dump(mode="json"))
-    assert result.report.status == "insufficient_evidence" and result.report.suspected_root_cause is None
+    assert result.report.confidence_method == "heuristic-v1"
     assert result.report.agent_findings == ["F-CONN-01", "F-INF-01", "F-PERF-01"]
-    assert result.report.evidence_sources == ["connectivity_agent", "infrastructure_agent", "performance_agent"]
+    assert result.report.evidence_sources == ["connectivity_agent", "correlation_agent", "infrastructure_agent",
+                                              "performance_agent"]
     assert result.report.normalization_log == ["cpu_utilization_pct -> cpu_pct"]
 
 

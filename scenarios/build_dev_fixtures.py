@@ -24,6 +24,7 @@ TIMES = [f"2026-11-01T10:0{m}:30Z" for m in range(5)]
 STALE_TIMES = [f"2026-11-01T09:4{m}:30Z" for m in range(5)]   # 20+ minutes before the window
 
 SWITCH, PROBE, WLC = "switch-telemetry", "client-probe", "wlc-telemetry"
+ICMP = "icmp-monitor"   # reachability comes from the NMS ping poller, not from the synthetic DNS/DHCP client probes
 UPLINKS = {"HOSTEL_UPLINK_01": "SW_CAMPUS_1", "DEPT_UPLINK_01": "SW_CAMPUS_2"}
 PROBED = ["SW_CAMPUS_3", "SW_CAMPUS_8"]          # one client probe per zone
 CHECKED = ["SW_CAMPUS_3", "SW_CAMPUS_4", "SW_CAMPUS_8", "SW_CAMPUS_9"]   # DNS/DHCP clients
@@ -86,8 +87,8 @@ def background(seed: int) -> Scenario:
         s.set("device_id", device, PROBE, "dns_success", [True] * 5)
         s.set("device_id", device, PROBE, "dhcp_success", [True] * 5)
     for device in ACCESS:
-        s.set("device_id", device, PROBE, "reachability", [True] * 5)
-    s.set("device_id", "SRV_DNS_DHCP_01", PROBE, "reachability", [True] * 5)
+        s.set("device_id", device, ICMP, "reachability", [True] * 5)
+    s.set("device_id", "SRV_DNS_DHCP_01", ICMP, "reachability", [True] * 5)
     s.set("device_id", "HOSTEL_AP_01", WLC, "rssi_dbm", s.noisy(-60, -54, 0))
     s.set("device_id", "HOSTEL_AP_01", WLC, "retry_rate_pct", s.noisy(3, 6))
     s.set("link_id", "HOSTEL_AP_LINK_01", SWITCH, "link_utilization_pct", s.noisy(15, 25))
@@ -204,7 +205,7 @@ def counter_reset() -> dict[str, Any]:
     s = background(111)
     s.set("link_id", "ACC_LINK_05", SWITCH, "interface_errors", [518, 520, 0, 1, 2])   # reboot, then normal ticking
     s.set("device_id", "SW_CAMPUS_5", PROBE, "packet_loss_pct", [0.0] * 5)
-    s.set("device_id", "SW_CAMPUS_5", PROBE, "reachability", [True] * 5)
+    s.set("device_id", "SW_CAMPUS_5", ICMP, "reachability", [True] * 5)
     return wrap("INC-0111", "Switch SW_CAMPUS_5 rebooted overnight; check it is fine", s.records())
 
 

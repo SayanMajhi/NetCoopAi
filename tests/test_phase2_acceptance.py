@@ -165,8 +165,7 @@ def test_trace_holds_the_wire_request_and_response() -> None:
 def test_report_is_schema_valid(name: str) -> None:
     report = run(name).report
     Report.model_validate(report.model_dump(mode="json"))
-    assert report.status == "insufficient_evidence"          # Phase 3 adds correlation and a named cause
-    assert set(report.evidence_sources) == {"connectivity_agent", "infrastructure_agent", "performance_agent"}
+    assert {"connectivity_agent", "infrastructure_agent", "performance_agent"} <= set(report.evidence_sources)
 
 
 # 6. Two runs of the same fixture are identical (no wall-clock in messages or reports).
@@ -206,7 +205,7 @@ def test_dense_scenarios_are_not_flagged_sparse() -> None:
 
 
 @pytest.mark.parametrize("scenario, status", [
-    ("scenarios/dev/congestion.json", "insufficient_evidence"),
+    ("scenarios/dev/congestion.json", "diagnosed"),
     ("data/generator_raw/normal_unseeded.json", "insufficient_evidence"),
     ("scenarios/dev/malformed_input.json", "invalid_input"),
     ("scenarios/dev/does_not_exist.json", "invalid_input"),
@@ -228,5 +227,6 @@ def test_cli_control_run_does_not_overwrite_the_normal_run(tmp_path: Path, capsy
     for extra in ([], ["--control"]):
         main(["run", scenario, "--local", "--out", str(tmp_path / "r"), "--traces", str(tmp_path / "t"), *extra])
     capsys.readouterr()
-    assert sorted(f.name for f in (tmp_path / "r").iterdir()) == ["INC-0103--control.json", "INC-0103.json"]
+    assert sorted(f.name for f in (tmp_path / "r").iterdir()) == ["INC-0103--control.json", "INC-0103--control.md",
+                                                              "INC-0103.json", "INC-0103.md"]
     assert sorted(f.name for f in (tmp_path / "t").iterdir()) == ["INC-0103--control.jsonl", "INC-0103.jsonl"]

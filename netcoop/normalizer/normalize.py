@@ -137,6 +137,9 @@ def normalize(fixture: dict, topology: dict, signatures: dict) -> NormalizationR
         if observed_at is None:
             result.validation_errors.append(f"{prefix}.timestamp: required timezone-aware timestamp")
             continue
+        raw_ts = record.get("timestamp")
+        if not raw_ts.endswith(("Z", "+00:00")):      # C5: non-UTC offsets are converted, and the log says so
+            result.normalization_log.append(f"{prefix}.timestamp {raw_ts} converted to UTC {observed_at.isoformat()}")
         timestamps.append(observed_at)
         device_id, link_id = record.get("device_id"), record.get("link_id")
         if bool(device_id) == bool(link_id) or not isinstance(device_id or link_id, str):

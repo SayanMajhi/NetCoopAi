@@ -88,9 +88,20 @@ def test_v2_rejected():
         upgrade(load("message_v2_0.json"))
 
 
-def test_v0_9_upgrade_not_yet_supported():
-    with pytest.raises(UnsupportedVersion, match="0.9"):
-        upgrade(load("finding_v0_9.json"))
+def test_v0_9_upgrades_with_a_visible_record():
+    body, records = upgrade(load("finding_v0_9.json"))
+    env = Envelope.model_validate(body)
+    assert env.type == "FINDING" and env.sender == "infrastructure_agent"
+    assert env.payload["hypothesis"] == "interface_fault@HOSTEL_UPLINK_01" and env.payload["stance"] == "supports"
+    assert env.timestamp.isoformat() == "2026-10-30T10:30:00+00:00"
+    assert records[0] == "upgraded netcoop/0.9 to netcoop/1.0" and "0.9 field 'msg_id' -> 'message_id'" in records
+
+
+def test_v0_9_kinds_without_a_mapping_are_refused():
+    msg = load("finding_v0_9.json")
+    msg["kind"] = "alarm"
+    with pytest.raises(UnsupportedVersion, match="alarm"):
+        upgrade(msg)
 
 
 def test_unknown_1_x_fields_preserved_in_extra():

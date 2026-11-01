@@ -41,6 +41,10 @@ Receivers validate with the exported JSON Schema **and** the typed models: Pytho
 | missing required field | `ERROR` with `MISSING_FIELD` and `field_path` |
 | duplicate `message_id` | ignored, logged, `ERROR` with `DUPLICATE_MESSAGE` |
 
+## Correlation: QUERY rounds and confidence
+- Correlation sends at most **2 QUERY rounds**: round 1 verifies the leading hypothesis's key measurement with the in-process agent that owns it (`desired_measurement`, `target_id`); round 2 queries the runner-up when it is within 0.15. The answering agent returns a RESPONSE whose `evidence_ids` are every fresh sample of that measurement; Correlation judges severity on those samples itself. Before/after rankings are recorded in the DECISION's `limitations`.
+- `confidence_method: heuristic-v1`; factor definitions and gates are in `netcoop/agents/correlation.py` (module docstring) and ARCHITECTURE.md §4. A FINDING citing an evidence ID that is not in the incident is answered with `UNKNOWN_EVIDENCE` and excluded. If Correlation fails twice, the report is `insufficient_evidence` with limitation `correlation_failed`.
+
 ## Determinism
 Message IDs follow `<incident>-<AGENT_ABBREV>-<seq>` (for example `INC-0001-PERF-01`), and evidence IDs follow `EV-<seq>`, both deterministic for a fixed fixture. Envelope timestamps use the incident clock (the window end), not wall time. Wall-clock receive times are kept only in the SQLite log and are excluded from exported traces.
 
