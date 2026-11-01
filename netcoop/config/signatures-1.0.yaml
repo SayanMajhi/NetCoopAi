@@ -41,11 +41,11 @@ signatures:
     required:
       - {metric: rssi_dbm, check: weak_or_grey_zone}
       - {metric: retry_rate_pct, check: above_warn}
-      - {metric: packet_loss_pct, scope: ap_uplink, check: below_warn}
     corroborating:
       min_matches: 0
       checks:
         - {metric: packet_loss_pct, check: above_warn}
+        - {metric: packet_loss_pct, scope: ap_uplink, check: below_warn}
     contradicting:
       - {metric: packet_loss_pct, scope: ap_uplink, check: above_warn}
       - {metric: link_utilization_pct, scope: ap_uplink, check: sustained_above_critical}
