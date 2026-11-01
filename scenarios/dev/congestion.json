@@ -863,5 +863,31 @@
     "throughput_mbps": 934.0
    }
   }
+ ],
+ "on_query": [
+  {
+   "timestamp": "2026-11-01T10:04:40Z",
+   "link_id": "HOSTEL_UPLINK_01",
+   "source_id": "on-demand-probe",
+   "metrics": {
+    "link_utilization_pct": 95.8
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:04:50Z",
+   "link_id": "HOSTEL_UPLINK_01",
+   "source_id": "on-demand-probe",
+   "metrics": {
+    "link_utilization_pct": 96.9
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:05:00Z",
+   "link_id": "HOSTEL_UPLINK_01",
+   "source_id": "on-demand-probe",
+   "metrics": {
+    "link_utilization_pct": 94.7
+   }
+  }
  ]
 }

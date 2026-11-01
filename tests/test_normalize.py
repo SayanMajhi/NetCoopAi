@@ -82,17 +82,43 @@ class NormalizeTests(unittest.TestCase):
                 self.assertTrue(all(row["original_value"] == raw["metrics"][row["original_field"].removeprefix("metrics.")]
                                     for row in adapter_rows))
 
-    def test_utilization_cross_check_keeps_raw_value_but_flags_discrepancy(self):
+    def test_utilization_cross_check_flags_only_a_verdict_disagreement(self):
         fixture = {"window_end": "2026-11-01T10:05:00Z", "records": [
             {"timestamp": "2026-11-01T10:04:00Z", "link_id": "HOSTEL_UPLINK_01",
-             "metrics": {"throughput_mbps": 500, "link_utilization_pct": 90}},
+             "metrics": {"throughput_mbps": 500, "link_utilization_pct": 95}},   # 95 % critical vs 50 % normal
         ]}
-        result = normalize(fixture, TOPOLOGY, SIGNATURES)
+        from netcoop.orchestrator.run import load_signatures
+        result = normalize(fixture, TOPOLOGY, load_signatures())                   # real warn/critical
         self.assertEqual([], result.validation_errors)
         measured = next(o for o in result.observations if o.metric == "link_utilization_pct")
-        self.assertEqual(90, measured.value)
+        self.assertEqual(95, measured.value)
         self.assertIn("malformed", measured.quality_flags)
-        self.assertTrue(any("differs" in entry for entry in result.normalization_log))
+        self.assertTrue(any("disagree about the verdict" in entry for entry in result.normalization_log))
+
+    def test_utilization_cross_check_keeps_agreeing_evidence(self):
+        """Phase 3 review R2: AI 3's three noisy pairs both say 'above 90 %'; keep them, log the mismatch."""
+        pairs = [(92.70, 1041), (93.56, 1018), (97.74, 904)]           # (measured %, throughput Mbps on 1 Gbps)
+        fixture = {"window_end": "2026-11-01T10:05:00Z", "records": [
+            {"timestamp": f"2026-11-01T10:0{i}:30Z", "link_id": "DEPT_UPLINK_01",
+             "metrics": {"link_utilization_pct": m, "throughput_mbps": t}} for i, (m, t) in enumerate(pairs)]}
+        result = normalize(fixture, TOPOLOGY, SIGNATURES)
+        utils = [o for o in result.observations if o.metric == "link_utilization_pct" and "derived" not in o.quality_flags]
+        self.assertEqual([92.70, 93.56, 97.74], [o.value for o in utils])
+        derived = [o for o in result.observations if o.metric == "link_utilization_pct" and "derived" in o.quality_flags]
+        self.assertEqual([100.0, 100.0, 90.4], [round(o.value, 1) for o in derived])   # second estimate kept, capped
+        self.assertTrue(all(o.quality_flags == ["ok"] for o in utils))
+        self.assertEqual(3, sum("cross-check mismatch" in line for line in result.normalization_log))
+        self.assertTrue(all(any("cross-check mismatch" in s for s in o.normalization_steps) for o in utils))
+
+    def test_impossible_throughput_ratio_skips_the_cross_check(self):
+        fixture = {"window_end": "2026-11-01T10:05:00Z", "records": [
+            {"timestamp": "2026-11-01T10:04:00Z", "link_id": "DEPT_UPLINK_01",
+             "metrics": {"link_utilization_pct": 40, "throughput_mbps": 1500}},
+        ]}
+        result = normalize(fixture, TOPOLOGY, SIGNATURES)
+        util = next(o for o in result.observations if o.metric == "link_utilization_pct")
+        self.assertEqual(["ok"], util.quality_flags)
+        self.assertTrue(any("impossible" in line for line in result.normalization_log))
 
     def test_legacy_adapter_also_reads_fixture_wrapper(self):
         fixture = {"window_end": "2026-11-01T10:05:00Z", "records": [

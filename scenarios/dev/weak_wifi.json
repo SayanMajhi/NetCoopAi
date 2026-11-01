@@ -908,5 +908,31 @@
     "throughput_mbps": 326.0
    }
   }
+ ],
+ "on_query": [
+  {
+   "timestamp": "2026-11-01T10:04:40Z",
+   "device_id": "HOSTEL_AP_01",
+   "source_id": "on-demand-probe",
+   "metrics": {
+    "rssi_dbm": -80.0
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:04:50Z",
+   "device_id": "HOSTEL_AP_01",
+   "source_id": "on-demand-probe",
+   "metrics": {
+    "rssi_dbm": -81.0
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:05:00Z",
+   "device_id": "HOSTEL_AP_01",
+   "source_id": "on-demand-probe",
+   "metrics": {
+    "rssi_dbm": -79.0
+   }
+  }
  ]
 }

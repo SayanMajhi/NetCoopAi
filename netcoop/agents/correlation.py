@@ -67,11 +67,14 @@ CLOSE = 0.15
 
 @dataclass
 class Check:
-    """One signature check evaluated on evidence: pass / fail / unknown."""
+    """One signature check evaluated on evidence: pass / fail / unknown (no usable evidence) /
+    inconclusive (evidence present but it neither confirms nor refutes, e.g. utilization that keeps
+    returning above warn without a sustained run above critical)."""
 
     name: str
     state: str
     evidence: list[Observation] = field(default_factory=list)
+    detail: str = ""          # why a check is unknown, e.g. "2 of 3 required fresh samples"
 
 
 @dataclass
@@ -100,6 +103,25 @@ class Candidate:
     @property
     def required_pass(self) -> bool:
         return bool(self.required) and all(c.state == "pass" for c in self.required)
+
+    @property
+    def refuted(self) -> bool:
+        """The evidence speaks against it: a required check fails or a contradicting check passes."""
+        return any(c.state == "fail" for c in self.required) or any(c.state == "pass" for c in self.contradicting_checks)
+
+    @property
+    def unassessed(self) -> bool:
+        """Not refuted, but too little fresh evidence to judge it (Phase 3 review R1)."""
+        return not self.refuted and self.coverage < 0.75 and any(c.state == "unknown" for c in self.required)
+
+    @property
+    def unresolved(self) -> bool:
+        """Neither confirmed nor refuted: unassessed, or a required check is inconclusive."""
+        return not self.refuted and (self.unassessed or any(c.state == "inconclusive" for c in self.required))
+
+    def unknown_reasons(self) -> list[str]:
+        return [f"{c.name}: {c.detail or 'no fresh evidence'}" for c in self.required
+                if c.state in ("unknown", "inconclusive")]
 
     def passing_evidence(self) -> list[Observation]:
         seen: dict[str, Observation] = {}
@@ -175,7 +197,7 @@ class _Evidence:
         minutes = (ctx.signatures.get("window") or {}).get("minutes", 5)
         start = ctx.clock - timedelta(minutes=minutes)
         self.ctx = ctx
-        self.fresh = [o for o in ctx.observations if o.value is not None
+        self.fresh = [o for o in ctx.observations if o.value is not None and not o.source_id.startswith("on-demand")
                       and not UNUSABLE.intersection(o.quality_flags) and start <= o.observed_at <= ctx.clock]
         self.stale = [o for o in ctx.observations if INCOMPLETE.intersection(o.quality_flags)]
 
@@ -185,7 +207,8 @@ class _Evidence:
         for o in self.fresh:
             t = o.device_id or o.link_id
             if t in wanted and o.metric == metric:
-                out.setdefault(f"{t}|{o.source_id}", []).append(o)
+                estimator = "derived" if "derived" in o.quality_flags else "measured"
+                out.setdefault(f"{t}|{o.source_id}|{estimator}", []).append(o)
         return {k: sorted(v, key=lambda o: (o.observed_at, o.evidence_id)) for k, v in sorted(out.items())}
 
     def stale_for(self, targets: Iterable[str], metric: str) -> int:
@@ -230,7 +253,10 @@ class CorrelationAgent(BaseAgent):
         return self.ranking()
 
     def ranking(self) -> list[Candidate]:
-        return sorted(self.candidates.values(), key=lambda c: (-c.confidence, c.hypothesis))
+        """By confidence (reported to 2 decimals); a tie at that precision goes to the stronger
+        signature evidence (signal_fit), then the name, never to the name alone."""
+        return sorted(self.candidates.values(),
+                      key=lambda c: (-c.confidence, -c.factors.get("signal_fit", 0.0), c.hypothesis))
 
     def _evaluate(self, cand: Candidate, sig: dict[str, Any], ctx: IncidentContext, topo: _Topo, ev: _Evidence) -> None:
         cand.required = [self._item(i, cand.target, ctx, topo, ev) for i in sig.get("required") or []]
@@ -248,7 +274,8 @@ class CorrelationAgent(BaseAgent):
                 return Check(name, "pass", [o for p in passing for o in p.evidence])
             if all(p.state == "fail" for p in parts):
                 return Check(name, "fail", [o for p in parts for o in p.evidence])
-            return Check(name, "unknown")
+            state = "inconclusive" if any(p.state == "inconclusive" for p in parts) else "unknown"
+            return Check(name, state, detail="; ".join(p.detail for p in parts if p.detail))
         return self._check(item, target, ctx, topo, ev)
 
     def _locations(self, item: dict[str, Any], target: str, topo: _Topo) -> list[list[str]]:
@@ -274,13 +301,26 @@ class CorrelationAgent(BaseAgent):
             series = ev.series(group, metric)
             if series:
                 state, used = _judge(check, metric, series, th, ctx)
-                return Check(name, state, used)
-        return Check(name, "unknown")
+                detail = ""
+                if state in ("unknown", "inconclusive"):
+                    need = ((ctx.signatures.get("window") or {}).get("congestion_min_consecutive_samples", 3)
+                            if check == "sustained_above_critical" else 2 if check == "rising_delta" else 1)
+                    have = max(len(s) for s in series.values())
+                    if have < need:
+                        detail = f"{metric} has {have} of {need} required fresh samples"
+                    elif check == "sustained_above_critical" and th.get("critical") is not None:
+                        detail = (f"{metric} stays above warn but shows no sustained run above critical "
+                                  f"in {have} samples: inconclusive")
+                    else:
+                        detail = f"no threshold configured for {metric}"
+                return Check(name, state, used, detail)
+        return Check(name, "unknown", detail=f"no fresh {metric} samples in scope")
 
     def _score(self, cand: Candidate, ctx: IncidentContext, topo: _Topo, ev: _Evidence,
                findings: list[Envelope]) -> None:
         req = cand.required
-        req_fit = sum(c.state == "pass" for c in req) / len(req) if req else 0.0
+        req_fit = sum(1.0 if c.state == "pass" else 0.5 if c.state == "inconclusive" else 0.0
+                      for c in req) / len(req) if req else 0.0
         cand.coverage = sum(c.state != "unknown" for c in req) / len(req) if req else 0.0
         matches = sum(c.state == "pass" for c in cand.corroborating)
         if cand.min_matches:
@@ -358,6 +398,9 @@ class CorrelationAgent(BaseAgent):
             return
         evidence = [o for e in response.payload.get("evidence_ids") or [] if (o := ctx.evidence(e)) is not None]
         cand.severity, cand.verified = _severity(cand.cause, evidence, ctx)
+        fresh = [o for o in evidence if o.source_id.startswith("on-demand")]
+        cand.verified += (f"; from {len(fresh)} new on-demand probe sample(s)" if fresh else
+                          "; no new probe was run: the window's own samples were re-read to grade severity")
         topo, ev = _Topo(ctx.topology), _Evidence(ctx)
         for c in self.candidates.values():
             self._score(c, ctx, topo, ev, findings)
@@ -374,9 +417,21 @@ class CorrelationAgent(BaseAgent):
         lead = leader.confidence - (rival.confidence if rival else 0.0) if leader else 0.0
         limitations: list[str] = list(self.history)
         healthy, healthy_conf, healthy_notes = _healthy(ctx, ranked)
+        # R1: a rival the agents raised but the evidence can neither confirm nor refute is unresolved.
+        unresolved = [c for c in ranked if c is not leader and c.unresolved and c.supporting]
+        for c in unresolved:
+            senders = ", ".join(sorted({f.sender for f in c.supporting}))
+            verb = "could not be assessed" if c.unassessed else "is inconclusive"
+            limitations.append(f"{c.hypothesis} {verb} ({'; '.join(c.unknown_reasons())}); "
+                               f"raised by {senders}, so it is not ruled out")
+        alternatives = [c for c in ranked if c is not leader and not c.refuted]
+        if leader and rival and rival.confidence == leader.confidence:
+            limitations.append(f"{leader.hypothesis} and {rival.hypothesis} tie at confidence {leader.confidence:.2f}; "
+                               f"ranked by signature evidence strength (signal_fit {leader.factors['signal_fit']} vs "
+                               f"{rival.factors['signal_fit']})")
 
         if leader and leader.required_pass and leader.confidence >= 0.70 and leader.coverage >= 0.75 \
-                and leader.factors["independent_source_fit"] == 1.0 and lead >= CLOSE:
+                and leader.factors["independent_source_fit"] == 1.0 and lead >= CLOSE and not unresolved:
             status = Status.diagnosed
         elif healthy:
             status = Status.healthy
@@ -398,7 +453,8 @@ class CorrelationAgent(BaseAgent):
                                   limitations=limitations)
         msg = self.make(ctx, "reporting_agent", MessageType.DECISION, payload.model_dump(mode="json"), in_reply_to)
         return msg, {"status": status, "leader": leader, "rival": rival, "ranked": ranked,
-                     "healthy_confidence": healthy_conf, "limitations": limitations}
+                     "healthy_confidence": healthy_conf, "limitations": limitations,
+                     "alternatives": alternatives, "unresolved": unresolved}
 
 
 # --------------------------------------------------------------------------- check semantics
@@ -451,13 +507,16 @@ def _judge(check: str, metric: str, series: dict[str, list[Observation]], th: di
     if check == "sustained_above_critical":
         need = (ctx.signatures.get("window") or {}).get("congestion_min_consecutive_samples", 3)
         for s in series.values():
-            run: list[Observation] = []
-            for o in s:
-                v = _num(o)
-                run = run + [o] if v is not None and v > limit else []
-                if len(run) >= need:
-                    return "pass", run
-        return ("fail", allobs) if any(len(s) >= need for s in series.values()) else ("unknown", [])
+            run = sustained_run(s, limit, warn, need)
+            if run:
+                return "pass", run
+        if not any(len(s) >= need for s in series.values()):
+            return "unknown", []
+        # No sustained run. Refute only if the link is not even elevated; utilization that keeps
+        # returning above warn without a clean critical run is inconclusive, not evidence against.
+        elevated = warn is not None and any(sum(1 for o in s if (v := _num(o)) is not None and v > warn) >= need
+                                            for s in series.values())
+        return ("inconclusive", allobs) if elevated else ("fail", allobs)
     latest = [s[-1] for s in series.values() if _num(s[-1]) is not None]
     if not latest:
         return "unknown", []
@@ -467,6 +526,34 @@ def _judge(check: str, metric: str, series: dict[str, list[Observation]], th: di
     if check == "below_warn":
         return ("pass" if all(_num(o) <= limit for o in latest) else "fail"), latest
     return "unknown", []
+
+
+def sustained_run(samples: list[Observation], critical: float, warn: Optional[float], need: int) -> list[Observation]:
+    """The first run with >= `need` samples above critical. A sample in the warn band (above warn,
+    at or below critical) neither counts nor ends the run; a sample at or below warn, or a
+    missing one, ends it. With no warn threshold every non-critical sample ends the run."""
+    run: list[Observation] = []
+    step = _sample_interval(samples)
+    previous = None
+    for o in samples:
+        if previous is not None and step and (o.observed_at - previous).total_seconds() > 1.5 * step:
+            run = []                       # a missing interval ends the run: no skipping gaps
+        previous = o.observed_at
+        v = _num(o)
+        if v is not None and v > critical:
+            run.append(o)
+            if len(run) >= need:
+                return run
+        elif v is None or warn is None or v <= warn:
+            run = []
+    return []
+
+
+def _sample_interval(samples: list[Observation]) -> float:
+    """Smallest positive spacing between samples, in seconds (0 if unknown)."""
+    times = sorted({o.observed_at for o in samples})
+    gaps = [(b - a).total_seconds() for a, b in zip(times, times[1:]) if b > a]
+    return min(gaps) if gaps else 0.0
 
 
 def _severity(cause: str, evidence: list[Observation], ctx: IncidentContext) -> tuple[float, str]:
@@ -484,11 +571,14 @@ def _severity(cause: str, evidence: list[Observation], ctx: IncidentContext) -> 
         return (0.6, f"{above}/{len(values)} samples above {critical:g}%") if above else \
             (0.2, f"no sample above {critical:g}%")
     if cause == "interface_fault" and warn is not None and len(values) >= 2:
-        peak = max((b - a for a, b in zip(values, values[1:]) if b >= a), default=0.0)
+        # Counter thresholds are per 1-minute sample interval; scale a faster probe to per-minute.
+        timed = [(o.observed_at, v) for o in sorted(evidence, key=lambda o: o.observed_at) if (v := _num(o)) is not None]
+        peak = max(((vb - va) * 60.0 / max((tb - ta).total_seconds(), 1.0)
+                    for (ta, va), (tb, vb) in zip(timed, timed[1:]) if vb >= va), default=0.0)
         if critical is not None and peak >= critical:
-            return 1.0, f"peak error delta {peak:g}/interval reaches critical {critical:g}"
-        return (0.4, f"peak error delta {peak:g}/interval reaches only warn {warn:g}") if peak >= warn else \
-            (0.1, f"peak error delta {peak:g}/interval below warn")
+            return 1.0, f"peak error rate {peak:g}/min reaches critical {critical:g}"
+        return (0.4, f"peak error rate {peak:g}/min reaches only warn {warn:g}") if peak >= warn else \
+            (0.1, f"peak error rate {peak:g}/min below warn")
     if cause == "weak_wifi" and values:
         zone = (ctx.signatures.get("rssi") or {}).get("grey_zone_dbm") or {}
         signal = median(values)
@@ -547,6 +637,8 @@ def _not_diagnosed(leader: Candidate, rival: Optional[Candidate], lead: float) -
         out.append(f"unresolved rival {rival.hypothesis} within {lead:.2f} of {leader.hypothesis}")
     if leader.confidence < 0.70:
         out.append(f"{leader.hypothesis}: confidence {leader.confidence:.2f} < 0.70")
+    if not out:
+        out.append(f"{leader.hypothesis}: not diagnosed while an unassessed rival remains open")
     return out
 
 

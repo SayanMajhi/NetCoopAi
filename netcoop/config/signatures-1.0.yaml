@@ -116,7 +116,7 @@ signatures:
 # Every `metric` above must be owned by an agent card (netcoop/protocol/cards.py).
 vocabulary:
   checks:
-    sustained_above_critical: "value above critical for >= window.congestion_min_consecutive_samples samples"
+    sustained_above_critical: "at least window.congestion_min_consecutive_samples samples above critical in one run; a run ends only at a sample at or below warn (a dip into the warn band is hysteresis, not recovery). Clarified in Phase 3 review."
     above_critical: "latest valid value above critical"
     above_warn: "latest valid value above warn"
     below_warn: "latest valid value at or below warn"
@@ -133,6 +133,11 @@ vocabulary:
     dns_server: "nodes with service dns in topology.json"
     dhcp_server: "nodes with service dhcp in topology.json"
     multiple_clients: "the same check observed on >= 2 distinct client devices"
+
+utilization_cross_check:
+  tolerance_points: 5
+  max_throughput_ratio_pct: 110
+  rationale: "Measured link_utilization_pct and throughput/capacity come from different counters and polling instants, so a few points of disagreement is normal. Beyond tolerance_points the mismatch is logged but the measured value is kept. It is marked malformed only when the two disagree about the verdict (one above critical while the other is at or below warn). A throughput/capacity ratio above max_throughput_ratio_pct is physically impossible, so the cross-check is skipped and logged rather than trusted. Revised in Phase 3 review (R2): discarding agreeing evidence made congestion unassessable under mild noise."
 
 healthy_coverage:
   require_fresh_performance_measurements: true

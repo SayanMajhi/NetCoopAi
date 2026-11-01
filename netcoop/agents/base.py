@@ -27,11 +27,24 @@ class IncidentContext:
     topology: dict[str, Any]
     signatures: dict[str, Any]            # parsed netcoop/config/signatures-1.0.yaml
     normalization_log: list[str] = field(default_factory=list)
+    on_demand: list[Observation] = field(default_factory=list)   # probe samples, released by probe()
 
     def __post_init__(self) -> None:
         if self.clock.tzinfo is None:
             raise ValueError("IncidentContext.clock must be timezone-aware")
         self._by_id = {o.evidence_id: o for o in self.observations}
+
+    def probe(self, targets: list[str], metric: str) -> list[Observation]:
+        """Run the on-demand probe for `metric` on the first target that has one: its samples
+        become evidence of this incident (new IDs) and are returned. Each probe runs once."""
+        for target in targets:
+            found = [o for o in self.on_demand if target in (o.device_id, o.link_id) and o.metric == metric]
+            if found:
+                self.on_demand = [o for o in self.on_demand if o not in found]
+                self.observations.extend(found)
+                self._by_id.update({o.evidence_id: o for o in found})
+                return sorted(found, key=lambda o: (o.observed_at, o.evidence_id))
+        return []
 
     def evidence(self, evidence_id: str) -> Optional[Observation]:
         return self._by_id.get(evidence_id)
@@ -115,6 +128,12 @@ class BaseAgent:
         metric, target = p["desired_measurement"], p["target_id"]
         links = {l.get("link_id"): l for l in ctx.topology.get("links") or [] if isinstance(l, dict)}
         places = [target] + ([links[target]["b"], links[target]["a"]] if target in links else [])
+        probed = ctx.probe(places, metric)
+        if probed:
+            answer = (f"ran an on-demand {metric} probe on {probed[0].device_id or probed[0].link_id}: "
+                      f"{len(probed)} new sample(s) {[o.value for o in probed]}")
+            payload = ResponsePayload(query_id=p["query_id"], evidence_ids=[o.evidence_id for o in probed], answer=answer)
+            return self.make(ctx, query.sender, MessageType.RESPONSE, payload.model_dump(mode="json"), query.message_id)
         usable = []
         for place in places:
             usable = [o for o in ctx.for_target(place, metric) if o.value is not None
@@ -122,7 +141,8 @@ class BaseAgent:
             if usable:
                 break
         values = [o.value for o in usable]
-        answer = (f"{len(usable)} fresh {metric} sample(s) on {usable[0].device_id or usable[0].link_id}: {values}"
-                  if usable else f"no fresh {metric} sample on {target}")
+        answer = (f"no on-demand probe available: re-read {len(usable)} {metric} sample(s) already in the window on "
+                  f"{usable[0].device_id or usable[0].link_id}: {values}; no new probe was run"
+                  if usable else f"no fresh {metric} sample on {target} and no on-demand probe available")
         payload = ResponsePayload(query_id=p["query_id"], evidence_ids=[o.evidence_id for o in usable], answer=answer)
         return self.make(ctx, query.sender, MessageType.RESPONSE, payload.model_dump(mode="json"), query.message_id)
