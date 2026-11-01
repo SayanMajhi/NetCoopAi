@@ -1,0 +1,112 @@
+{
+  "incident_id": "INC-H9-042",
+  "status": "insufficient_evidence",
+  "suspected_root_cause": null,
+  "confidence": 0.74,
+  "confidence_method": "heuristic-v1",
+  "signature_version": "1.0",
+  "affected_devices": [],
+  "affected_segments": [],
+  "supporting_evidence": [
+    {
+      "evidence_id": "EV-005",
+      "metric": "link_utilization_pct",
+      "value": 93.08,
+      "unit": "percent",
+      "source_id": "switch-telemetry",
+      "interval_delta": null
+    },
+    {
+      "evidence_id": "EV-007",
+      "metric": "link_utilization_pct",
+      "value": 100.0,
+      "unit": "percent",
+      "source_id": "switch-telemetry",
+      "interval_delta": null
+    },
+    {
+      "evidence_id": "EV-009",
+      "metric": "link_utilization_pct",
+      "value": 100.0,
+      "unit": "percent",
+      "source_id": "switch-telemetry",
+      "interval_delta": null
+    }
+  ],
+  "agent_findings": [
+    "F-CONN-01",
+    "F-CONN-02",
+    "F-CONN-03",
+    "F-CONN-04",
+    "F-CONN-05",
+    "F-CONN-06",
+    "F-CONN-07",
+    "F-CONN-08",
+    "F-CONN-09",
+    "F-INF-435",
+    "F-INF-436",
+    "F-PERF-776",
+    "F-PERF-777",
+    "F-PERF-778",
+    "F-PERF-779",
+    "F-PERF-780"
+  ],
+  "alternative_causes": [],
+  "recommended_actions": [
+    "Collect corroborating evidence for link_congestion@ACC_LINK_06: queue_drops rising \u2265 10/interval or latency above 100 ms (high utilization alone is a busy link, not a fault)",
+    "Re-run the diagnosis on a fresh 5-minute window before changing anything"
+  ],
+  "evidence_sources": [
+    "connectivity_agent",
+    "correlation_agent",
+    "infrastructure_agent",
+    "performance_agent"
+  ],
+  "limitations": [
+    "before Q-01: link_congestion@ACC_LINK_06 0.73",
+    "after Q-01: link_congestion@ACC_LINK_06 0.74 (link_congestion@ACC_LINK_06: 2/3 samples above 90%; from 3 new on-demand probe sample(s))",
+    "healthy not shown: fresh performance measurements within normal range \u2014 not met",
+    "healthy not shown: no candidate passes all its required checks \u2014 not met",
+    "link_congestion@ACC_LINK_06: corroboration not met (needs queue_drops rising \u2265 10/interval or latency above 100 ms)",
+    "link_congestion@ACC_LINK_06: evidence from fewer than two independent raw sources"
+  ],
+  "normalization_log": [
+    "records[15].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[16].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[17].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[18].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[19].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[25].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[26].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[27].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[28].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[29].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "ACC_LINK_06 at 2026-11-06T00:16:07+00:00: cross-check mismatch: measured 96.15% vs throughput/capacity 85.0806% (over 5 points) but both give the same verdict; measured value kept",
+    "ACC_LINK_06 at 2026-11-06T00:16:07+00:00: derived utilization 85.0806% from throughput/capacity",
+    "ACC_LINK_06 at 2026-11-06T00:17:08+00:00: derived utilization 71.6777% from throughput/capacity",
+    "ACC_LINK_06 at 2026-11-06T00:18:06+00:00: cross-check mismatch: measured 93.08% vs throughput/capacity 102.295% (over 5 points) but both give the same verdict; measured value kept",
+    "ACC_LINK_06 at 2026-11-06T00:18:06+00:00: derived utilization 100% from throughput/capacity",
+    "ACC_LINK_06 at 2026-11-06T00:19:12+00:00: derived utilization 100% from throughput/capacity",
+    "ACC_LINK_06 at 2026-11-06T00:20:16+00:00: cross-check mismatch: measured 100% vs throughput/capacity 88.0954% (over 5 points) but both give the same verdict; measured value kept",
+    "ACC_LINK_06 at 2026-11-06T00:20:16+00:00: derived utilization 88.0954% from throughput/capacity",
+    "DEPT_UPLINK_01 at 2026-11-06T00:16:07+00:00: cross-check mismatch: measured 47.3% vs throughput/capacity 36.5204% (over 5 points) but both give the same verdict; measured value kept",
+    "DEPT_UPLINK_01 at 2026-11-06T00:16:07+00:00: derived utilization 36.5204% from throughput/capacity",
+    "DEPT_UPLINK_01 at 2026-11-06T00:17:08+00:00: cross-check mismatch: measured 54.29% vs throughput/capacity 39.669% (over 5 points) but both give the same verdict; measured value kept",
+    "DEPT_UPLINK_01 at 2026-11-06T00:17:08+00:00: derived utilization 39.669% from throughput/capacity",
+    "DEPT_UPLINK_01 at 2026-11-06T00:18:06+00:00: cross-check mismatch: measured 39.98% vs throughput/capacity 30.3547% (over 5 points) but both give the same verdict; measured value kept",
+    "DEPT_UPLINK_01 at 2026-11-06T00:18:06+00:00: derived utilization 30.3547% from throughput/capacity",
+    "DEPT_UPLINK_01 at 2026-11-06T00:19:12+00:00: derived utilization 38.8936% from throughput/capacity",
+    "DEPT_UPLINK_01 at 2026-11-06T00:20:16+00:00: cross-check mismatch: measured 40.91% vs throughput/capacity 49.6682% (over 5 points) but both give the same verdict; measured value kept",
+    "DEPT_UPLINK_01 at 2026-11-06T00:20:16+00:00: derived utilization 49.6682% from throughput/capacity",
+    "HOSTEL_UPLINK_01 at 2026-11-06T00:16:07+00:00: cross-check mismatch: measured 46.72% vs throughput/capacity 54.5758% (over 5 points) but both give the same verdict; measured value kept",
+    "HOSTEL_UPLINK_01 at 2026-11-06T00:16:07+00:00: derived utilization 54.5758% from throughput/capacity",
+    "HOSTEL_UPLINK_01 at 2026-11-06T00:17:08+00:00: derived utilization 28.5216% from throughput/capacity",
+    "HOSTEL_UPLINK_01 at 2026-11-06T00:18:06+00:00: cross-check mismatch: measured 34% vs throughput/capacity 28.6766% (over 5 points) but both give the same verdict; measured value kept",
+    "HOSTEL_UPLINK_01 at 2026-11-06T00:18:06+00:00: derived utilization 28.6766% from throughput/capacity",
+    "HOSTEL_UPLINK_01 at 2026-11-06T00:19:12+00:00: cross-check mismatch: measured 34.83% vs throughput/capacity 54.8704% (over 5 points) but both give the same verdict; measured value kept",
+    "HOSTEL_UPLINK_01 at 2026-11-06T00:19:12+00:00: derived utilization 54.8704% from throughput/capacity",
+    "HOSTEL_UPLINK_01 at 2026-11-06T00:20:16+00:00: derived utilization 28.0589% from throughput/capacity"
+  ],
+  "validation_errors": [],
+  "agent_trace_id": "INC-H9-042-TRACE"
+}

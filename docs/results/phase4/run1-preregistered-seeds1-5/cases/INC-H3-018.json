@@ -1,0 +1,70 @@
+{
+  "incident_id": "INC-H3-018",
+  "status": "insufficient_evidence",
+  "suspected_root_cause": null,
+  "confidence": 0.0,
+  "confidence_method": "heuristic-v1",
+  "signature_version": "1.0",
+  "affected_devices": [],
+  "affected_segments": [],
+  "supporting_evidence": [],
+  "agent_findings": [
+    "F-CONN-01",
+    "F-CONN-02",
+    "F-CONN-03",
+    "F-CONN-04",
+    "F-CONN-05",
+    "F-CONN-06",
+    "F-CONN-07",
+    "F-CONN-08",
+    "F-CONN-09",
+    "F-INF-266",
+    "F-INF-267",
+    "F-PERF-478",
+    "F-PERF-479",
+    "F-PERF-480",
+    "F-PERF-481"
+  ],
+  "alternative_causes": [],
+  "recommended_actions": [
+    "Collect fresh performance, infrastructure and service/path measurements for the affected area, then re-run the diagnosis"
+  ],
+  "evidence_sources": [
+    "connectivity_agent",
+    "infrastructure_agent",
+    "performance_agent"
+  ],
+  "limitations": [
+    "healthy not shown: fresh performance measurements within normal range \u2014 not met",
+    "no fault hypothesis was nominated with evidence; heuristic-v1 confidence 0.0"
+  ],
+  "normalization_log": [
+    "records[15].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[16].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[17].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[18].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[19].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[25].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[26].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[27].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[28].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[29].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "ACC_LINK_08 at 2026-11-09T16:53:49+00:00: derived utilization 94.3% from throughput/capacity",
+    "ACC_LINK_08 at 2026-11-09T16:54:51+00:00: derived utilization 96.8% from throughput/capacity",
+    "ACC_LINK_08 at 2026-11-09T16:56:06+00:00: derived utilization 98.3% from throughput/capacity",
+    "ACC_LINK_08 at 2026-11-09T16:56:48+00:00: derived utilization 97.5% from throughput/capacity",
+    "ACC_LINK_08 at 2026-11-09T16:58:05+00:00: derived utilization 95.3% from throughput/capacity",
+    "DEPT_UPLINK_01 at 2026-11-09T16:53:49+00:00: derived utilization 59.3% from throughput/capacity",
+    "DEPT_UPLINK_01 at 2026-11-09T16:54:51+00:00: derived utilization 49.1% from throughput/capacity",
+    "DEPT_UPLINK_01 at 2026-11-09T16:56:06+00:00: derived utilization 52.8% from throughput/capacity",
+    "DEPT_UPLINK_01 at 2026-11-09T16:56:48+00:00: derived utilization 59.7% from throughput/capacity",
+    "DEPT_UPLINK_01 at 2026-11-09T16:58:05+00:00: derived utilization 60.2% from throughput/capacity",
+    "HOSTEL_UPLINK_01 at 2026-11-09T16:53:49+00:00: derived utilization 48.2% from throughput/capacity",
+    "HOSTEL_UPLINK_01 at 2026-11-09T16:54:51+00:00: derived utilization 52.1% from throughput/capacity",
+    "HOSTEL_UPLINK_01 at 2026-11-09T16:56:06+00:00: derived utilization 52.1% from throughput/capacity",
+    "HOSTEL_UPLINK_01 at 2026-11-09T16:56:48+00:00: derived utilization 59.5% from throughput/capacity",
+    "HOSTEL_UPLINK_01 at 2026-11-09T16:58:05+00:00: derived utilization 60.6% from throughput/capacity"
+  ],
+  "validation_errors": [],
+  "agent_trace_id": "INC-H3-018-TRACE"
+}

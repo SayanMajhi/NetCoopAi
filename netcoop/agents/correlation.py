@@ -561,10 +561,15 @@ def sustained_run(samples: list[Observation], critical: float, warn: Optional[fl
 
 
 def _sample_interval(samples: list[Observation]) -> float:
-    """Smallest positive spacing between samples, in seconds (0 if unknown)."""
+    """The polling interval, in seconds (0 if unknown): the median spacing between samples.
+    Pollers jitter (45 s, 73 s, 57 s ... for a 60 s poll); the smallest spacing would make an ordinary
+    late sample look like a missing interval (Phase 4 held-out run 1). A real gap is about 2x the median."""
     times = sorted({o.observed_at for o in samples})
-    gaps = [(b - a).total_seconds() for a, b in zip(times, times[1:]) if b > a]
-    return min(gaps) if gaps else 0.0
+    gaps = sorted((b - a).total_seconds() for a, b in zip(times, times[1:]) if b > a)
+    if not gaps:
+        return 0.0
+    mid = len(gaps) // 2
+    return gaps[mid] if len(gaps) % 2 else (gaps[mid - 1] + gaps[mid]) / 2
 
 
 def _severity(cause: str, evidence: list[Observation], ctx: IncidentContext) -> tuple[float, str]:

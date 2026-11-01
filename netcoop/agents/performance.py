@@ -7,6 +7,7 @@ from collections import defaultdict
 from datetime import timedelta
 
 from netcoop.agents.base import BaseAgent, IncidentContext
+from netcoop.agents.correlation import _sample_interval
 from netcoop.protocol.models import Envelope, MessageType, Observation
 
 _BAD = {"missing", "stale", "out_of_window", "malformed", "counter_reset"}
@@ -85,8 +86,7 @@ def _streak(samples: list[Observation], ctx: IncidentContext, minutes: float,
     """`minimum` samples above critical in one run; a dip into the warn band does not end the run
     (signatures vocabulary `sustained_above_critical`), a sample at or below warn or a stale one does."""
     warn = _limit(ctx, "link_utilization_pct", "warn")
-    times = sorted({o.observed_at for o in samples})
-    step = min(((b - a).total_seconds() for a, b in zip(times, times[1:]) if b > a), default=0.0)
+    step = _sample_interval(samples)   # median spacing: poller jitter is not a missing interval
     consecutive: list[Observation] = []
     previous = None
     for obs in samples:

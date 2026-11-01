@@ -23,3 +23,5 @@ dashboard/dist/
 
 # local Claude Code settings
 .claude/
+eval/
+eval-remote/

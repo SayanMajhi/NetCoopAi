@@ -1,0 +1,180 @@
+{
+ "cases": 240,
+ "n_per_seed": 48,
+ "seeds": [
+  1,
+  2,
+  3,
+  4,
+  5
+ ],
+ "sigma": 0.0,
+ "frozen": "thresholds, weights and gates from netcoop/config/signatures-1.0.yaml (unchanged since ed288c2)",
+ "class_counts": {
+  "healthy": 30,
+  "busy_healthy": 30,
+  "link_congestion": 30,
+  "interface_fault": 30,
+  "weak_wifi": 30,
+  "dns_failure": 30,
+  "dhcp_failure": 30,
+  "stale_telemetry": 30
+ },
+ "outcomes": {
+  "exact": 237,
+  "abstained": 2,
+  "right cause": 1
+ },
+ "outcomes_by_class": {
+  "healthy": {
+   "exact": 30
+  },
+  "busy_healthy": {
+   "exact": 30
+  },
+  "link_congestion": {
+   "exact": 27,
+   "abstained": 2,
+   "right cause": 1
+  },
+  "interface_fault": {
+   "exact": 30
+  },
+  "weak_wifi": {
+   "exact": 30
+  },
+  "dns_failure": {
+   "exact": 30
+  },
+  "dhcp_failure": {
+   "exact": 30
+  },
+  "stale_telemetry": {
+   "exact": 30
+  }
+ },
+ "accuracy_overall_exact": 0.988,
+ "accuracy_overall_acceptable": 0.992,
+ "accuracy_named_causes": 0.987,
+ "affected_device_accuracy": 1.0,
+ "healthy_false_diagnosis_rate": 0.0,
+ "false_diagnosis_rate_by_class": {
+  "healthy": 0.0,
+  "busy_healthy": 0.0,
+  "stale_telemetry": 0.0
+ },
+ "healthy_abstention_rate": 0.0,
+ "abstention_rate_by_class": {
+  "healthy": 0.0,
+  "busy_healthy": 1.0,
+  "link_congestion": 0.067,
+  "interface_fault": 0.0,
+  "weak_wifi": 0.0,
+  "dns_failure": 0.0,
+  "dhcp_failure": 0.0,
+  "stale_telemetry": 1.0
+ },
+ "wrong_diagnoses": 0,
+ "hedged_wrong": 0,
+ "evidence_link_integrity": 1.0,
+ "confusion_matrix": {
+  "healthy": {
+   "healthy": 30
+  },
+  "busy_healthy": {
+   "insufficient_evidence": 30
+  },
+  "link_congestion": {
+   "insufficient_evidence": 2,
+   "link_congestion": 28
+  },
+  "interface_fault": {
+   "interface_fault": 30
+  },
+  "weak_wifi": {
+   "weak_wifi": 30
+  },
+  "dns_failure": {
+   "dns_failure": 30
+  },
+  "dhcp_failure": {
+   "dhcp_failure": 30
+  },
+  "stale_telemetry": {
+   "insufficient_evidence": 30
+  }
+ },
+ "status_by_variant": {
+  "busy_healthy / spiky 80-93 %": {
+   "insufficient_evidence": 15
+  },
+  "busy_healthy / steady 84-93 %": {
+   "insufficient_evidence": 15
+  },
+  "dhcp_failure / one source (P4-3)": {
+   "probable": 8
+  },
+  "dhcp_failure / two sources": {
+   "diagnosed": 22
+  },
+  "dns_failure / one source (P4-3)": {
+   "probable": 13
+  },
+  "dns_failure / two sources": {
+   "diagnosed": 17
+  },
+  "healthy / complaint names an area": {
+   "healthy": 19
+  },
+  "healthy / complaint names nothing": {
+   "healthy": 11
+  },
+  "interface_fault / errors and flaps": {
+   "diagnosed": 6
+  },
+  "interface_fault / errors only": {
+   "diagnosed": 18
+  },
+  "interface_fault / flaps only": {
+   "diagnosed": 6
+  },
+  "link_congestion / drops only": {
+   "probable": 11
+  },
+  "link_congestion / latency and drops": {
+   "diagnosed": 7,
+   "probable": 1
+  },
+  "link_congestion / latency only": {
+   "diagnosed": 9,
+   "insufficient_evidence": 2
+  },
+  "stale_telemetry / congestion, utilization missing": {
+   "insufficient_evidence": 18
+  },
+  "stale_telemetry / interface fault, switch telemetry stale": {
+   "insufficient_evidence": 12
+  },
+  "weak_wifi / DEPT_AP_01": {
+   "diagnosed": 30
+  }
+ },
+ "label_rules": {
+  "healthy": "background only, every service/path check passes -> healthy",
+  "busy_healthy": "one link 80-93 % utilization (spiky or steady), latency normal, drops only background growth (< 10/interval) -> not a fault; any diagnosed/probable answer is a false diagnosis",
+  "link_congestion": "utilization sustained >= 91 % on the link; corroborated by probe latency (second source) -> diagnosed; by queue drops only (same source as utilization) -> probable",
+  "interface_fault": "errors and/or flaps rising >= 15/interval on the link plus downstream loss 3-8 % from a probe -> diagnosed",
+  "weak_wifi": "AP RSSI -86..-77 dBm and retries 25-40 % with a clean AP uplink -> diagnosed",
+  "dns_failure": "2-4 clients fail DNS, server reachable; reachability from the ICMP poller -> diagnosed; DNS and reachability from the same client probe (P4-3) -> probable",
+  "dhcp_failure": "as dns_failure, for DHCP",
+  "stale_telemetry": "a congestion or interface fault whose key series is missing or 20+ minutes old -> insufficient_evidence"
+ },
+ "messages_by_type": {
+  "DECISION": 240,
+  "FINDING": 3561,
+  "QUERY": 88,
+  "RESPONSE": 88,
+  "TASK": 720
+ },
+ "error_codes": {}
+}

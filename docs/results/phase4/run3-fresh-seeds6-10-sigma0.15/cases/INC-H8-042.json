@@ -1,0 +1,115 @@
+{
+  "incident_id": "INC-H8-042",
+  "status": "probable",
+  "suspected_root_cause": "link_congestion@ACC_LINK_03",
+  "confidence": 0.85,
+  "confidence_method": "heuristic-v1",
+  "signature_version": "1.0",
+  "affected_devices": [
+    "SW_CAMPUS_3"
+  ],
+  "affected_segments": [
+    "ACC_LINK_03"
+  ],
+  "supporting_evidence": [
+    {
+      "evidence_id": "EV-154",
+      "metric": "latency_ms",
+      "value": 193.412,
+      "unit": "ms",
+      "source_id": "client-probe",
+      "interval_delta": null
+    },
+    {
+      "evidence_id": "EV-163",
+      "metric": "queue_drops",
+      "value": 1602.0,
+      "unit": "count",
+      "source_id": "switch-telemetry",
+      "interval_delta": 314.0
+    },
+    {
+      "evidence_id": "EV-164",
+      "metric": "queue_drops",
+      "value": 1977.0,
+      "unit": "count",
+      "source_id": "switch-telemetry",
+      "interval_delta": 375.0
+    }
+  ],
+  "agent_findings": [
+    "F-CONN-01",
+    "F-CONN-02",
+    "F-CONN-03",
+    "F-CONN-04",
+    "F-CONN-05",
+    "F-CONN-06",
+    "F-CONN-07",
+    "F-CONN-08",
+    "F-CONN-09",
+    "F-CONN-10",
+    "F-INF-322",
+    "F-INF-323",
+    "F-INF-324",
+    "F-PERF-575",
+    "F-PERF-576",
+    "F-PERF-577",
+    "F-PERF-578"
+  ],
+  "alternative_causes": [],
+  "recommended_actions": [
+    "Confirm before acting: Check egress queue depth and top talkers on ACC_LINK_03",
+    "Confirm before acting: Rebalance or rate-limit bulk traffic, or add capacity to ACC_LINK_03 if utilization stays high"
+  ],
+  "evidence_sources": [
+    "connectivity_agent",
+    "correlation_agent",
+    "infrastructure_agent",
+    "performance_agent"
+  ],
+  "limitations": [
+    "before Q-01: link_congestion@ACC_LINK_03 0.84",
+    "after Q-01: link_congestion@ACC_LINK_03 0.85 (link_congestion@ACC_LINK_03: 3/7 samples above 90%; no new probe was run: the window's own samples were re-read to grade severity)",
+    "link_congestion@ACC_LINK_03: required check(s) not met: link_utilization_pct sustained_above_critical"
+  ],
+  "normalization_log": [
+    "records[15].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[16].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[17].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[18].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[19].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[30].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[31].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[32].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[33].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[34].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "ACC_LINK_03 at 2026-11-02T15:03:50+00:00: cross-check mismatch: measured 96.1% vs throughput/capacity 73.9364%; they disagree about the verdict (critical 90% vs warn 80%), measured value marked malformed",
+    "ACC_LINK_03 at 2026-11-02T15:03:50+00:00: derived utilization 73.9364% from throughput/capacity",
+    "ACC_LINK_03 at 2026-11-02T15:04:52+00:00: throughput/capacity 114.769% is impossible (> 110%); cross-check skipped, measured utilization 98.53% kept",
+    "ACC_LINK_03 at 2026-11-02T15:05:59+00:00: cross-check mismatch: measured 100% vs throughput/capacity 76.4856%; they disagree about the verdict (critical 90% vs warn 80%), measured value marked malformed",
+    "ACC_LINK_03 at 2026-11-02T15:05:59+00:00: derived utilization 76.4856% from throughput/capacity",
+    "ACC_LINK_03 at 2026-11-02T15:06:47+00:00: cross-check mismatch: measured 81.05% vs throughput/capacity 93.8051% (over 5 points) but both give the same verdict; measured value kept",
+    "ACC_LINK_03 at 2026-11-02T15:06:47+00:00: derived utilization 93.8051% from throughput/capacity",
+    "ACC_LINK_03 at 2026-11-02T15:08:00+00:00: cross-check mismatch: measured 86.58% vs throughput/capacity 102.008% (over 5 points) but both give the same verdict; measured value kept",
+    "ACC_LINK_03 at 2026-11-02T15:08:00+00:00: derived utilization 100% from throughput/capacity",
+    "DEPT_UPLINK_01 at 2026-11-02T15:03:50+00:00: cross-check mismatch: measured 25.32% vs throughput/capacity 33.002% (over 5 points) but both give the same verdict; measured value kept",
+    "DEPT_UPLINK_01 at 2026-11-02T15:03:50+00:00: derived utilization 33.002% from throughput/capacity",
+    "DEPT_UPLINK_01 at 2026-11-02T15:04:52+00:00: derived utilization 29.1565% from throughput/capacity",
+    "DEPT_UPLINK_01 at 2026-11-02T15:05:59+00:00: cross-check mismatch: measured 19.49% vs throughput/capacity 26.1881% (over 5 points) but both give the same verdict; measured value kept",
+    "DEPT_UPLINK_01 at 2026-11-02T15:05:59+00:00: derived utilization 26.1881% from throughput/capacity",
+    "DEPT_UPLINK_01 at 2026-11-02T15:06:47+00:00: derived utilization 20.1698% from throughput/capacity",
+    "DEPT_UPLINK_01 at 2026-11-02T15:08:00+00:00: derived utilization 22.376% from throughput/capacity",
+    "HOSTEL_UPLINK_01 at 2026-11-02T15:03:50+00:00: cross-check mismatch: measured 28.26% vs throughput/capacity 20.4012% (over 5 points) but both give the same verdict; measured value kept",
+    "HOSTEL_UPLINK_01 at 2026-11-02T15:03:50+00:00: derived utilization 20.4012% from throughput/capacity",
+    "HOSTEL_UPLINK_01 at 2026-11-02T15:04:52+00:00: cross-check mismatch: measured 34.27% vs throughput/capacity 20.5731% (over 5 points) but both give the same verdict; measured value kept",
+    "HOSTEL_UPLINK_01 at 2026-11-02T15:04:52+00:00: derived utilization 20.5731% from throughput/capacity",
+    "HOSTEL_UPLINK_01 at 2026-11-02T15:05:59+00:00: cross-check mismatch: measured 24.9% vs throughput/capacity 33.5926% (over 5 points) but both give the same verdict; measured value kept",
+    "HOSTEL_UPLINK_01 at 2026-11-02T15:05:59+00:00: derived utilization 33.5926% from throughput/capacity",
+    "HOSTEL_UPLINK_01 at 2026-11-02T15:06:47+00:00: cross-check mismatch: measured 26.5% vs throughput/capacity 19.1202% (over 5 points) but both give the same verdict; measured value kept",
+    "HOSTEL_UPLINK_01 at 2026-11-02T15:06:47+00:00: derived utilization 19.1202% from throughput/capacity",
+    "HOSTEL_UPLINK_01 at 2026-11-02T15:08:00+00:00: cross-check mismatch: measured 31.98% vs throughput/capacity 20.7775% (over 5 points) but both give the same verdict; measured value kept",
+    "HOSTEL_UPLINK_01 at 2026-11-02T15:08:00+00:00: derived utilization 20.7775% from throughput/capacity"
+  ],
+  "validation_errors": [],
+  "agent_trace_id": "INC-H8-042-TRACE"
+}
