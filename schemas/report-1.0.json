@@ -7,6 +7,19 @@
           "title": "Evidence Id",
           "type": "string"
         },
+        "interval_delta": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Cumulative counters only: increase since the previous sample of the same series. Null for non-counters, the first sample, after a gap, or on a counter reset",
+          "title": "Interval Delta"
+        },
         "metric": {
           "title": "Metric",
           "type": "string"

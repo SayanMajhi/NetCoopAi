@@ -1,0 +1,104 @@
+{
+  "incident_id": "INC-H3-034",
+  "status": "probable",
+  "suspected_root_cause": "link_congestion@ACC_LINK_03",
+  "confidence": 0.88,
+  "confidence_method": "heuristic-v1",
+  "signature_version": "1.0",
+  "affected_devices": [
+    "SW_CAMPUS_3"
+  ],
+  "affected_segments": [
+    "ACC_LINK_03"
+  ],
+  "supporting_evidence": [
+    {
+      "evidence_id": "EV-165",
+      "metric": "latency_ms",
+      "value": 191.0,
+      "unit": "ms",
+      "source_id": "client-probe",
+      "interval_delta": null
+    },
+    {
+      "evidence_id": "EV-173",
+      "metric": "queue_drops",
+      "value": 813.0,
+      "unit": "count",
+      "source_id": "switch-telemetry",
+      "interval_delta": 120.0
+    },
+    {
+      "evidence_id": "EV-174",
+      "metric": "queue_drops",
+      "value": 1094.0,
+      "unit": "count",
+      "source_id": "switch-telemetry",
+      "interval_delta": 281.0
+    }
+  ],
+  "agent_findings": [
+    "F-CONN-01",
+    "F-CONN-02",
+    "F-CONN-03",
+    "F-CONN-04",
+    "F-CONN-05",
+    "F-CONN-06",
+    "F-CONN-07",
+    "F-CONN-08",
+    "F-CONN-09",
+    "F-CONN-10",
+    "F-INF-303",
+    "F-INF-304",
+    "F-INF-305",
+    "F-PERF-545",
+    "F-PERF-546",
+    "F-PERF-547",
+    "F-PERF-548"
+  ],
+  "alternative_causes": [],
+  "recommended_actions": [
+    "Confirm before acting: Check egress queue depth and top talkers on ACC_LINK_03",
+    "Confirm before acting: Rebalance or rate-limit bulk traffic, or add capacity to ACC_LINK_03 if utilization stays high"
+  ],
+  "evidence_sources": [
+    "connectivity_agent",
+    "correlation_agent",
+    "infrastructure_agent",
+    "performance_agent"
+  ],
+  "limitations": [
+    "before Q-01: link_congestion@ACC_LINK_03 0.84",
+    "after Q-01: link_congestion@ACC_LINK_03 0.88 (link_congestion@ACC_LINK_03: all 10 utilization samples above 90%; no new probe was run: the window's own samples were re-read to grade severity)",
+    "link_congestion@ACC_LINK_03: required check(s) not met: link_utilization_pct sustained_above_critical"
+  ],
+  "normalization_log": [
+    "records[15].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[16].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[17].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[18].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[19].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[30].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[31].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[32].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[33].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[34].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "ACC_LINK_03 at 2026-11-05T17:52:37+00:00: derived utilization 97.4% from throughput/capacity",
+    "ACC_LINK_03 at 2026-11-05T17:53:22+00:00: derived utilization 91.1% from throughput/capacity",
+    "ACC_LINK_03 at 2026-11-05T17:54:35+00:00: derived utilization 97% from throughput/capacity",
+    "ACC_LINK_03 at 2026-11-05T17:55:32+00:00: derived utilization 91.3% from throughput/capacity",
+    "ACC_LINK_03 at 2026-11-05T17:56:40+00:00: derived utilization 92.2% from throughput/capacity",
+    "DEPT_UPLINK_01 at 2026-11-05T17:52:37+00:00: derived utilization 56.8% from throughput/capacity",
+    "DEPT_UPLINK_01 at 2026-11-05T17:53:22+00:00: derived utilization 56.2% from throughput/capacity",
+    "DEPT_UPLINK_01 at 2026-11-05T17:54:35+00:00: derived utilization 54.1% from throughput/capacity",
+    "DEPT_UPLINK_01 at 2026-11-05T17:55:32+00:00: derived utilization 52.8% from throughput/capacity",
+    "DEPT_UPLINK_01 at 2026-11-05T17:56:40+00:00: derived utilization 55.9% from throughput/capacity",
+    "HOSTEL_UPLINK_01 at 2026-11-05T17:52:37+00:00: derived utilization 55.7% from throughput/capacity",
+    "HOSTEL_UPLINK_01 at 2026-11-05T17:53:22+00:00: derived utilization 46.6% from throughput/capacity",
+    "HOSTEL_UPLINK_01 at 2026-11-05T17:54:35+00:00: derived utilization 58.6% from throughput/capacity",
+    "HOSTEL_UPLINK_01 at 2026-11-05T17:55:32+00:00: derived utilization 60.3% from throughput/capacity",
+    "HOSTEL_UPLINK_01 at 2026-11-05T17:56:40+00:00: derived utilization 50.8% from throughput/capacity"
+  ],
+  "validation_errors": [],
+  "agent_trace_id": "INC-H3-034-TRACE"
+}

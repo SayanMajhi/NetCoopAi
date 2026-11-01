@@ -211,7 +211,8 @@ def run_incident(fixture: Any, topology: dict[str, Any], signatures: dict[str, A
                          validation_errors=["no window_end and no timestamped observations"])
     ctx = IncidentContext(incident_id=incident_id, clock=clock, observations=list(norm.observations),
                           topology=topology, signatures=signatures, normalization_log=norm.normalization_log,
-                          on_demand=list(norm.on_demand))
+                          on_demand=list(norm.on_demand),
+                          complaint=fixture.get("complaint") if isinstance(fixture.get("complaint"), str) else "")
     run = _Run(incident_id, clock)
     run.known_evidence = {o.evidence_id for o in norm.observations}
     run.limitations.extend(comps.unavailable)

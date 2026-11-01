@@ -2,6 +2,7 @@
 
     netcoop run <scenario> [--local] [--control] [--endpoint URL]   diagnose one scenario
     netcoop export-schemas      regenerate schemas/*.json and the PROTOCOL.md field table
+    netcoop eval [--n 48] [--seed S ...] [--noise SIGMA] [--out DIR]   score the held-out set (Phase 4)
 """
 from __future__ import annotations
 
@@ -39,6 +40,20 @@ def cmd_run(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_eval(args: argparse.Namespace) -> int:
+    from netcoop.evaluation.evaluate import evaluate
+
+    out = Path(args.out) / (f"n{args.n}-seeds{'-'.join(map(str, args.seed))}-sigma{args.noise:g}")
+    summary = evaluate(args.n, args.seed, sigma=args.noise, out=out,
+                       endpoint=args.endpoint)
+    keys = ("cases", "accuracy_overall_exact", "accuracy_named_causes", "affected_device_accuracy",
+            "healthy_false_diagnosis_rate", "healthy_abstention_rate", "wrong_diagnoses", "hedged_wrong",
+            "evidence_link_integrity", "outcomes", "error_codes")
+    print(json.dumps({k: summary[k] for k in keys}, indent=2))
+    print(f"\nsummary: {out / 'summary.md'}", file=sys.stderr)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     from netcoop.orchestrator.run import DEFAULT_ENDPOINT, DEFAULT_TOPOLOGY
 
@@ -56,6 +71,14 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--out", default="reports")
     run.add_argument("--traces", default="traces")
     run.set_defaults(func=cmd_run)
+
+    ev = sub.add_parser("eval", help="generate the held-out set, run it, publish metrics (ARCHITECTURE §7)")
+    ev.add_argument("--n", type=int, default=48, help="cases per seed (8 classes, round-robin)")
+    ev.add_argument("--seed", type=int, nargs="+", default=[1], help="one or more generator seeds")
+    ev.add_argument("--noise", type=float, default=0.0, help="AI 3's multiplicative noise sigma, e.g. 0.05")
+    ev.add_argument("--endpoint", default=None, help="score against a running Connectivity service instead")
+    ev.add_argument("--out", default="eval")
+    ev.set_defaults(func=cmd_eval)
 
     args = parser.parse_args(argv)
     if not getattr(args, "func", None):

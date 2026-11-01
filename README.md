@@ -30,8 +30,9 @@ netcoop run data/generator_raw/hardware_failure_unseeded.json   # untouched orga
 
 netcoop export-schemas                    # regenerate schemas/ + PROTOCOL.md after editing models.py
 python scenarios/build_dev_fixtures.py    # rebuild the 17 labelled scenarios in scenarios/dev/
+netcoop eval --n 48 --seed 6 7 8 9 10 --noise 0.10   # held-out evaluation -> eval/<run>/summary.md
 ```
-Each run writes `reports/<incident>.json` (the report-1.0 diagnosis), `reports/<incident>.md` (the same report for humans) and `traces/<incident>.jsonl` (every message, including the QUERY/RESPONSE rounds and the HTTP bodies to and from Connectivity). Statuses: `diagnosed`, `probable`, `healthy`, `insufficient_evidence`, `invalid_input`, `failed`. Coming next: `netcoop eval` on held-out scenarios (Phase 4).
+Each run writes `reports/<incident>.json` (the report-1.0 diagnosis), `reports/<incident>.md` (the same report for humans) and `traces/<incident>.jsonl` (every message, including the QUERY/RESPONSE rounds and the HTTP bodies to and from Connectivity). Statuses: `diagnosed`, `probable`, `healthy`, `insufficient_evidence`, `invalid_input`, `failed`.
 
 ### How verification works (QUERY)
 Before deciding, Correlation **verifies** the leading hypothesis (and a close rival) by sending a QUERY to the agent that owns its key measurement (e.g. utilization → Performance, interface errors → Infrastructure).
@@ -42,6 +43,18 @@ Before deciding, Correlation **verifies** the leading hypothesis (and a close ri
 
 ### How a diagnosis is decided
 Agents nominate hypotheses; the **Correlation agent** re-checks each one against its signature in `netcoop/config/signatures-1.0.yaml`, verifies the leader (and a close rival) with a **QUERY** to the agent that owns the key measurement, and scores it with **`heuristic-v1`** (`netcoop/agents/correlation.py` documents every factor). Gates: `diagnosed` needs confidence ≥ 0.70, coverage ≥ 0.75, two independent raw sources, a 0.15 lead **and no unresolved rival** (a hypothesis the agents raised that the evidence can neither confirm nor refute is listed in `alternative_causes` and blocks a diagnosis); `probable` names what is missing; `healthy` needs normal measurements **and** passing service and path checks; otherwise the system abstains with `insufficient_evidence`. Confidence values are documented heuristics, not calibrated probabilities.
+
+### Held-out evaluation (Phase 4)
+`netcoop eval` generates incidents from `netcoop/evaluation/heldout.py` (committed before any result was looked at; new seeds, times, topology positions and metric mixes; labels come from the fault the generator overlays, never from the system), runs each one, and publishes every ARCHITECTURE §7 metric. Results, with the pre-registered first run, the bug it found and every non-exact case's trace: [`docs/results/PHASE4_RESULTS.md`](docs/results/PHASE4_RESULTS.md).
+
+| fresh seeds 6–10, 240 cases | σ 0 | σ 0.05 | σ 0.10 | σ 0.15 |
+|---|---|---|---|---|
+| exact (status + cause) | 100 % | 100 % | 99.2 % | 96.7 % |
+| false diagnosis on healthy / busy-but-healthy / stale (90 cases) | 0 | 0 | 0 | 0 |
+| wrong diagnoses / hedged wrong | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 |
+| abstained (fault classes) | 0 | 0 | 2 | 6 |
+
+These numbers come from our own fault model: they show the logic holds across positions, timing and noise, not how it would score on real campus telemetry.
 
 ## How it works
 | Component | Role |
@@ -74,4 +87,4 @@ Statuses: `diagnosed`, `probable`, `healthy`, `insufficient_evidence`, `invalid_
 ## Limitations
 - The organizer generator returns one reading for one device per call, with no topology, repeated samples or fault labels. We use it to prove we ingest the official format untouched; diagnostic accuracy is measured on our own labeled scenarios (`scenarios/`).
 - Thresholds are documented heuristics, not calibrated probabilities.
-- _Held-out evaluation results: added in Phase 4._
+- Held-out evaluation uses our own generator (see above and `docs/results/PHASE4_RESULTS.md`); there are no held-out two-fault incidents.

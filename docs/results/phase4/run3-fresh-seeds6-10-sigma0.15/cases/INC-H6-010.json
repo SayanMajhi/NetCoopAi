@@ -1,0 +1,112 @@
+{
+  "incident_id": "INC-H6-010",
+  "status": "probable",
+  "suspected_root_cause": "link_congestion@ACC_LINK_04",
+  "confidence": 0.85,
+  "confidence_method": "heuristic-v1",
+  "signature_version": "1.0",
+  "affected_devices": [
+    "SW_CAMPUS_4"
+  ],
+  "affected_segments": [
+    "ACC_LINK_04"
+  ],
+  "supporting_evidence": [
+    {
+      "evidence_id": "EV-184",
+      "metric": "latency_ms",
+      "value": 242.366,
+      "unit": "ms",
+      "source_id": "client-probe",
+      "interval_delta": null
+    },
+    {
+      "evidence_id": "EV-190",
+      "metric": "queue_drops",
+      "value": 884.0,
+      "unit": "count",
+      "source_id": "switch-telemetry",
+      "interval_delta": null
+    },
+    {
+      "evidence_id": "EV-191",
+      "metric": "queue_drops",
+      "value": 1229.0,
+      "unit": "count",
+      "source_id": "switch-telemetry",
+      "interval_delta": 345.0
+    }
+  ],
+  "agent_findings": [
+    "F-CONN-01",
+    "F-CONN-02",
+    "F-CONN-03",
+    "F-CONN-04",
+    "F-CONN-05",
+    "F-CONN-06",
+    "F-CONN-07",
+    "F-CONN-08",
+    "F-CONN-09",
+    "F-INF-23",
+    "F-INF-24",
+    "F-INF-25",
+    "F-PERF-41",
+    "F-PERF-42",
+    "F-PERF-43",
+    "F-PERF-44"
+  ],
+  "alternative_causes": [],
+  "recommended_actions": [
+    "Confirm before acting: Check egress queue depth and top talkers on ACC_LINK_04",
+    "Confirm before acting: Rebalance or rate-limit bulk traffic, or add capacity to ACC_LINK_04 if utilization stays high"
+  ],
+  "evidence_sources": [
+    "connectivity_agent",
+    "correlation_agent",
+    "infrastructure_agent",
+    "performance_agent"
+  ],
+  "limitations": [
+    "before Q-01: link_congestion@ACC_LINK_04 0.84",
+    "after Q-01: link_congestion@ACC_LINK_04 0.85 (link_congestion@ACC_LINK_04: 2/3 samples above 90%; from 3 new on-demand probe sample(s))",
+    "link_congestion@ACC_LINK_04: required check(s) not met: link_utilization_pct sustained_above_critical"
+  ],
+  "normalization_log": [
+    "records[15].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[16].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[17].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[18].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[19].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[30].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[31].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[32].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[33].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[34].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "ACC_LINK_04 at 2026-11-03T01:20:12+00:00: cross-check mismatch: measured 95.17% vs throughput/capacity 84.3233% (over 5 points) but both give the same verdict; measured value kept",
+    "ACC_LINK_04 at 2026-11-03T01:20:12+00:00: derived utilization 84.3233% from throughput/capacity",
+    "ACC_LINK_04 at 2026-11-03T01:21:08+00:00: throughput/capacity 120.055% is impossible (> 110%); cross-check skipped, measured utilization 88.75% kept",
+    "ACC_LINK_04 at 2026-11-03T01:21:59+00:00: derived utilization 100% from throughput/capacity",
+    "ACC_LINK_04 at 2026-11-03T01:23:11+00:00: cross-check mismatch: measured 100% vs throughput/capacity 78.8438%; they disagree about the verdict (critical 90% vs warn 80%), measured value marked malformed",
+    "ACC_LINK_04 at 2026-11-03T01:23:11+00:00: derived utilization 78.8438% from throughput/capacity",
+    "ACC_LINK_04 at 2026-11-03T01:24:01+00:00: cross-check mismatch: measured 100% vs throughput/capacity 84.7246% (over 5 points) but both give the same verdict; measured value kept",
+    "ACC_LINK_04 at 2026-11-03T01:24:01+00:00: derived utilization 84.7246% from throughput/capacity",
+    "DEPT_UPLINK_01 at 2026-11-03T01:20:12+00:00: cross-check mismatch: measured 59.92% vs throughput/capacity 71.6221% (over 5 points) but both give the same verdict; measured value kept",
+    "DEPT_UPLINK_01 at 2026-11-03T01:20:12+00:00: derived utilization 71.6221% from throughput/capacity",
+    "DEPT_UPLINK_01 at 2026-11-03T01:21:08+00:00: derived utilization 39.6857% from throughput/capacity",
+    "DEPT_UPLINK_01 at 2026-11-03T01:21:59+00:00: derived utilization 57.4491% from throughput/capacity",
+    "DEPT_UPLINK_01 at 2026-11-03T01:23:11+00:00: cross-check mismatch: measured 60.61% vs throughput/capacity 49.4238% (over 5 points) but both give the same verdict; measured value kept",
+    "DEPT_UPLINK_01 at 2026-11-03T01:23:11+00:00: derived utilization 49.4238% from throughput/capacity",
+    "DEPT_UPLINK_01 at 2026-11-03T01:24:01+00:00: cross-check mismatch: measured 39.19% vs throughput/capacity 59.228% (over 5 points) but both give the same verdict; measured value kept",
+    "DEPT_UPLINK_01 at 2026-11-03T01:24:01+00:00: derived utilization 59.228% from throughput/capacity",
+    "HOSTEL_UPLINK_01 at 2026-11-03T01:20:12+00:00: derived utilization 64.2052% from throughput/capacity",
+    "HOSTEL_UPLINK_01 at 2026-11-03T01:21:08+00:00: cross-check mismatch: measured 59.12% vs throughput/capacity 51.1863% (over 5 points) but both give the same verdict; measured value kept",
+    "HOSTEL_UPLINK_01 at 2026-11-03T01:21:08+00:00: derived utilization 51.1863% from throughput/capacity",
+    "HOSTEL_UPLINK_01 at 2026-11-03T01:21:59+00:00: cross-check mismatch: measured 74.68% vs throughput/capacity 51.2261% (over 5 points) but both give the same verdict; measured value kept",
+    "HOSTEL_UPLINK_01 at 2026-11-03T01:21:59+00:00: derived utilization 51.2261% from throughput/capacity",
+    "HOSTEL_UPLINK_01 at 2026-11-03T01:23:11+00:00: derived utilization 42.573% from throughput/capacity",
+    "HOSTEL_UPLINK_01 at 2026-11-03T01:24:01+00:00: cross-check mismatch: measured 60.67% vs throughput/capacity 47.5244% (over 5 points) but both give the same verdict; measured value kept",
+    "HOSTEL_UPLINK_01 at 2026-11-03T01:24:01+00:00: derived utilization 47.5244% from throughput/capacity"
+  ],
+  "validation_errors": [],
+  "agent_trace_id": "INC-H6-010-TRACE"
+}

@@ -260,6 +260,9 @@ class EvidenceItem(_Strict):
     value: Optional[float | str | bool]
     unit: str
     source_id: str
+    interval_delta: Optional[float] = Field(
+        default=None, description="Cumulative counters only: increase since the previous sample of the same "
+                                  "series. Null for non-counters, the first sample, after a gap, or on a counter reset")
 
 
 _NAMED = [Status.diagnosed.value, Status.probable.value]
