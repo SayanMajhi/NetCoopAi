@@ -1,6 +1,6 @@
 # NetCoop AI
 
-Five specialist agents exchange **validatable evidence** over a versioned protocol (`netcoop/1.0`), challenge one another, and publish **one** evidence-based JSON diagnosis of a campus network fault. Data is synthetic; nothing touches a real network.
+Five specialist agents trade validatable evidence with one another over a versioned protocol (netcoop/1.0), challenge each other's findings, and then publish a single evidence-based JSON diagnosis of a campus network fault. The data involved is synthetic, so nothing ever touches a real network.
 
 - Problem statement: [docs/problem_statement.pdf](docs/problem_statement.pdf)
 - Architecture: [ARCHITECTURE.md](ARCHITECTURE.md) · context for AI coding assistants: [CLAUDE.md](CLAUDE.md)
@@ -70,19 +70,19 @@ netcoop eval --n 48 --seed 6 7 8 9 10 --noise 0.10   # held-out evaluation -> ev
 Each run writes `reports/<incident>.json` (the report-1.0 diagnosis), `reports/<incident>.md` (the same report for humans) and `traces/<incident>.jsonl` (every message, including the QUERY/RESPONSE rounds and the HTTP bodies to and from Connectivity). Statuses: `diagnosed`, `probable`, `healthy`, `insufficient_evidence`, `invalid_input`, `failed`.
 
 ### How verification works (QUERY)
-Before deciding, Correlation **verifies** the leading hypothesis (and a close rival) by sending a QUERY to the agent that owns its key measurement (e.g. utilization → Performance, interface errors → Infrastructure).
-- If the scenario has **on-demand probe samples** (`on_query` block, source `on-demand-probe`), the agent *runs the probe*: the RESPONSE cites **new evidence IDs** that did not exist before the QUERY, and Correlation grades severity (critical vs only warn) from them. Those samples grade severity only; the signature checks stay on the 5-minute window.
-- If there is no probe data, the agent **re-reads the window's samples** and says so in the RESPONSE ("no new probe was run"); the DECISION repeats it. Nothing new is claimed.
-- DNS/DHCP faults are not queried: their evidence is Connectivity's own pass/fail service checks, already in hand.
-- Confidence on `correlation_timeout` is `0.0` with method `none: correlation_failed (no heuristic-v1 score could be computed)`: no ranking was possible, and the report says so.
+Before making a decision, Correlation **verifies** the leading hypothesis (along with a close rival) by sending a QUERY to the agent responsible for its key measurement (e.g., utilization → Performance, interface errors → Infrastructure).
+- If the scenario includes **on-demand probe samples** (an `on_query` block with source `on-demand-probe`), the agent *runs the probe*: the RESPONSE then cites **new evidence IDs** that did not exist before the QUERY, and Correlation uses them to determine severity (critical versus warn only). Those samples only determine severity; the signature checks remain on the 5-minute window.
+- If no probe data exists, the agent **re-reads the window's samples** and states this in the RESPONSE ("no new probe was run"); the DECISION repeats that as well. No new claims are made.
+- DNS/DHCP faults are not queried: their evidence comes from Connectivity's own pass/fail service checks, which are already available.
+- Confidence for `correlation_timeout` is `0.0` with method `none: correlation_failed (no heuristic-v1 score could be computed)`: no ranking could be performed, and the report states this.
 
 ### How a diagnosis is decided
-Agents nominate hypotheses; the **Correlation agent** re-checks each one against its signature in `netcoop/config/signatures-1.0.yaml`, verifies the leader (and a close rival) with a **QUERY** to the agent that owns the key measurement, and scores it with **`heuristic-v1`** (`netcoop/agents/correlation.py` documents every factor). Gates: `diagnosed` needs confidence ≥ 0.70, coverage ≥ 0.75, two independent raw sources, a 0.15 lead **and no unresolved rival** (a hypothesis the agents raised that the evidence can neither confirm nor refute is listed in `alternative_causes` and blocks a diagnosis); `probable` names what is missing; `healthy` needs normal measurements **and** passing service and path checks; otherwise the system abstains with `insufficient_evidence`. Confidence values are documented heuristics, not calibrated probabilities, so the report caps them by status: `diagnosed`/`healthy` at most 0.95 (nothing from one window is certain) and `probable` at most 0.69 (it never outscores a cause that passed the 0.70 gate). The uncapped score stays in the DECISION and the cap is named in `limitations`.
+Agents propose hypotheses; the **Correlation agent** checks each one again against its signature in `netcoop/config/signatures-1.0.yaml`, confirms the leader (and a close rival) with a **QUERY** to the agent that owns the key measurement, and scores it using **`heuristic-v1`** (every factor is documented in `netcoop/agents/correlation.py`). Gates: `diagnosed` requires confidence ≥ 0.70, coverage ≥ 0.75, two independent raw sources, a 0.15 lead **and no unresolved rival** (a hypothesis the agents raised that the evidence can neither confirm nor refute is listed in `alternative_causes` and blocks a diagnosis); `probable` states what is missing; `healthy` requires normal measurements **and** passing service and path checks; otherwise the system abstains with `insufficient_evidence`. Confidence values are documented heuristics, not calibrated probabilities, so the report caps them by status: `diagnosed`/`healthy` at most 0.95 (nothing from one window is certain) and `probable` at most 0.69 (it never scores higher than a cause that passed the 0.70 gate). The uncapped score remains in the DECISION, and the cap is named in `limitations`.
 
 ### What every report tells you
 - `summary`: one plain sentence, e.g. *Probably link congestion on DEPT_UPLINK_01, affecting SW_CAMPUS_2, but not confirmed: interface_fault@DEPT_UPLINK_01 cannot yet be ruled out. Verify before acting.*
 - `supporting_evidence[]`: evidence ID, metric, value, unit, raw source, per-interval delta for counters, and `interpretation` against the configured threshold (*above critical 90 percent*).
-- `validation_errors`: every input message the bus rejected, with its typed code and field (`SCHEMA_VERSION_UNSUPPORTED`, `MISSING_FIELD`, `DUPLICATE_MESSAGE`, ...), and every telemetry item the normalizer skipped (an unknown metric or key, or a record with no usable timestamp, target or metrics). One bad item does not reject the incident: the rest is diagnosed, and only an input with nothing usable left is `invalid_input`. Skipped items, or utilization that looks like a 0–1 fraction, rule out a `healthy` verdict, because the fault could be in the data that was not read. Aliases such as `ping_ms`, `rtt_ms`, `latency_s` and `jitter_s` are mapped (seconds ×1000) and logged.
+- `validation_errors`: every input message the bus rejected, with its typed code and field (`SCHEMA_VERSION_UNSUPPORTED`, `MISSING_FIELD`, `DUPLICATE_MESSAGE`, ...).
 - `limitations`: the time window, the confidence cap, any malformed/missing/stale readings that were excluded, and the before/after ranking of each QUERY round.
 
 ### Held-out evaluation (Phase 4)
@@ -126,6 +126,6 @@ Statuses: `diagnosed`, `probable`, `healthy`, `insufficient_evidence`, `invalid_
 - Only the protocol lead edits `netcoop/protocol/models.py`; run `netcoop export-schemas` and commit the regenerated files in the same PR.
 
 ## Limitations
-- The organizer generator returns one reading for one device per call, with no topology, repeated samples or fault labels. We use it to prove we ingest the official format untouched; diagnostic accuracy is measured on our own labeled scenarios (`scenarios/`).
-- Thresholds are documented heuristics, not calibrated probabilities.
-- Held-out evaluation uses our own generator (see above and `docs/results/PHASE4_RESULTS.md`); there are no held-out two-fault incidents.
+- Each time the organizer generator is called, it returns a single reading for a single device, and it does not provide any topology information, repeated samples, or fault labels. We rely on it to demonstrate that we can ingest the official format exactly as it is, without any modifications; meanwhile, diagnostic accuracy is evaluated using our own labeled scenarios, which are stored in the `scenarios/` directory.
+- Thresholds are documented heuristics rather than probabilities that have been calibrated in any formal way.
+- For held-out evaluation, we rely on our own generator (see above and `docs/results/PHASE4_RESULTS.md`); there are no held-out incidents that involve two faults.
