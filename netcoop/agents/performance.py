@@ -60,6 +60,12 @@ def _p95_above(ctx: IncidentContext, metric: str, scope: set[str], minutes: floa
 
 
 def _rising_drops(ctx: IncidentContext, scope: set[str], minutes: float) -> list[Observation]:
+    """A drop counter that rose by at least queue_drops.warn within one interval (the same per-interval
+    rule as Correlation's rising_delta). Background growth below warn is normal; a reset pair is skipped
+    because a reset sample is never fresh."""
+    warn = _limit(ctx, "queue_drops", "warn")
+    if warn is None:
+        return []
     groups: dict[tuple[str, str], list[Observation]] = defaultdict(list)
     for obs in ctx.by_metric("queue_drops"):
         target = obs.device_id or obs.link_id
@@ -68,7 +74,8 @@ def _rising_drops(ctx: IncidentContext, scope: set[str], minutes: float) -> list
     for key in sorted(groups):
         samples = sorted(groups[key], key=lambda o: (o.observed_at, o.evidence_id))
         for before, after in zip(samples, samples[1:]):
-            if _fresh(ctx, before, minutes) and _fresh(ctx, after, minutes) and after.value > before.value:
+            if _fresh(ctx, before, minutes) and _fresh(ctx, after, minutes) \
+                    and after.value - before.value >= warn:
                 return [before, after]
     return []
 

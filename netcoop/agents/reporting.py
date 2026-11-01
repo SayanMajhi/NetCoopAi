@@ -127,6 +127,10 @@ def _next_checks(leader: Optional[Candidate]) -> list[str]:
         return ["Collect fresh performance, infrastructure and service/path measurements for the affected area, "
                 "then re-run the diagnosis"]
     missing = [c.name for c in leader.required if c.state != "pass"]
+    if not leader.corroboration_met:
+        return [f"Collect corroborating evidence for {leader.hypothesis}: {leader.corroboration_need} "
+                f"(high utilization alone is a busy link, not a fault)",
+                "Re-run the diagnosis on a fresh 5-minute window before changing anything"]
     return [f"Collect the missing check(s) for {leader.hypothesis}: {', '.join(missing) or 'more samples'}",
             "Re-run the diagnosis on a fresh 5-minute window before changing anything"]
 
