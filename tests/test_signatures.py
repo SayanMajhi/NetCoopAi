@@ -46,3 +46,23 @@ def test_checks_use_owned_metrics_and_frozen_vocabulary():
 def test_thresholds_only_for_owned_metrics():
     for metric in SIG["thresholds"]:
         assert metric in OWNED, f"threshold for {metric} but no agent card owns it"
+
+
+def test_no_null_thresholds_and_each_has_a_rationale():
+    for metric, th in SIG["thresholds"].items():
+        assert th.get("warn") is not None and th.get("critical") is not None, f"{metric}: null threshold"
+        assert isinstance(th.get("rationale"), str) and len(th["rationale"]) > 20, f"{metric}: rationale missing"
+        assert th.get("direction"), f"{metric}: direction missing"
+
+
+def test_warn_and_critical_are_ordered_by_direction():
+    for metric, th in SIG["thresholds"].items():
+        if th["direction"] in ("high", "rising_delta"):
+            assert th["warn"] < th["critical"], metric
+        elif th["direction"] in ("low", "low_relative_to_capacity"):
+            assert th["warn"] > th["critical"], metric
+
+
+def test_throughput_thresholds_are_fractions_of_capacity():
+    th = SIG["thresholds"]["throughput_mbps"]
+    assert th["basis"] == "fraction_of_capacity" and 0 < th["critical"] < th["warn"] < 1

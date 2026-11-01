@@ -22,15 +22,17 @@ def cmd_export(_: argparse.Namespace) -> int:
 def cmd_run(args: argparse.Namespace) -> int:
     from netcoop.orchestrator.run import load_signatures, load_topology, run_incident, write_outputs
 
+    unreadable = None
     try:
         fixture = json.loads(Path(args.scenario).read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        fixture = {"incident_id": Path(args.scenario).stem, "_unreadable": f"{type(exc).__name__}: {exc}"}
+        fixture, unreadable = None, f"{type(exc).__name__}: {exc}"
     result = run_incident(fixture, load_topology(Path(args.topology)), load_signatures(),
                           connectivity="local" if args.local else "remote",
-                          endpoint=args.endpoint, control=args.control)
-    if "_unreadable" in fixture:
-        result.report.validation_errors.insert(0, f"cannot read scenario: {fixture['_unreadable']}")
+                          endpoint=args.endpoint, control=args.control,
+                          incident_id=f"INC-{Path(args.scenario).stem}")   # used when the file has none
+    if unreadable:
+        result.report.validation_errors[:] = [f"cannot read scenario: {unreadable}"]
     report_path, trace_path = write_outputs(result, Path(args.out), Path(args.traces))
     print(json.dumps(result.report.model_dump(mode="json"), indent=2))
     print(f"\nreport: {report_path}\ntrace:  {trace_path}", file=sys.stderr)

@@ -154,17 +154,32 @@ class _Run:
 # --------------------------------------------------------------------------- pipeline
 
 
+def _shape_error(fixture: Any) -> Optional[str]:
+    """Accept a scenario wrapper ({records: [...]}) or one untouched organizer-generator
+    record ({timestamp, device_id, metrics, status}); field-level checks are the normalizer's."""
+    if not isinstance(fixture, dict):
+        return "scenario must be a JSON object"
+    if "records" in fixture:
+        records = fixture["records"]
+        return None if isinstance(records, list) and records else "'records' must be a non-empty list"
+    if isinstance(fixture.get("metrics"), dict):
+        return None
+    return "scenario must have a non-empty 'records' list or be one generator record with 'metrics'"
+
+
 def run_incident(fixture: Any, topology: dict[str, Any], signatures: dict[str, Any], *,
                  components: Optional[Components] = None, control: bool = False,
-                 connectivity: str = "remote", endpoint: str = DEFAULT_ENDPOINT) -> RunResult:
+                 connectivity: str = "remote", endpoint: str = DEFAULT_ENDPOINT,
+                 incident_id: Optional[str] = None) -> RunResult:
+    """`incident_id` is used when the input has none (an untouched generator record)."""
     comps = components if components is not None else default_components(connectivity, endpoint)
     version = str(signatures.get("version", "unknown"))
-    incident_id = fixture.get("incident_id") if isinstance(fixture, dict) else None
-    incident_id = incident_id if isinstance(incident_id, str) and incident_id else "INC-UNKNOWN"
+    given = fixture.get("incident_id") if isinstance(fixture, dict) else None
+    incident_id = given if isinstance(given, str) and given else (incident_id or "INC-UNKNOWN")
 
-    if not isinstance(fixture, dict) or not isinstance(fixture.get("records"), list) or not fixture["records"]:
-        return _terminal(incident_id, Status.invalid_input, version,
-                         validation_errors=["scenario must be a JSON object with a non-empty 'records' list"])
+    shape_error = _shape_error(fixture)
+    if shape_error:
+        return _terminal(incident_id, Status.invalid_input, version, validation_errors=[shape_error])
     if comps.normalize is None:
         return _terminal(incident_id, Status.failed, version, limitations=comps.unavailable)
 
@@ -185,6 +200,7 @@ def run_incident(fixture: Any, topology: dict[str, Any], signatures: dict[str, A
                           topology=topology, signatures=signatures, normalization_log=norm.normalization_log)
     run = _Run(incident_id, clock)
     run.limitations.extend(comps.unavailable)
+    run.limitations.extend(_sparse_telemetry(norm, signatures))
     orch = _Orchestrator()
 
     for raw in fixture.get("messages") or []:          # injected protocol cases (0.9, 2.x, duplicates ...)
@@ -225,6 +241,20 @@ def run_incident(fixture: Any, topology: dict[str, Any], signatures: dict[str, A
     run.limitations.append("correlation not implemented (Phase 3): no cause is named yet")
     report = _report(run, version, norm.normalization_log)
     return RunResult(report=report, messages=run.messages, wire=run.wire, findings=run.findings)
+
+
+def _sparse_telemetry(norm: NormalizationResult, signatures: dict[str, Any]) -> list[str]:
+    """Say so when no series is long enough for the window checks (e.g. one organizer reading)."""
+    need = (signatures.get("window") or {}).get("congestion_min_consecutive_samples", 3)
+    counts: dict[tuple[Any, ...], int] = {}
+    for o in norm.observations:
+        key = (o.device_id or o.link_id, o.metric, o.source_id)
+        counts[key] = counts.get(key, 0) + 1
+    longest = max(counts.values(), default=0)
+    if longest >= need:
+        return []
+    return [f"sparse telemetry: at most {longest} sample(s) per metric; sustained-window checks need {need} "
+            "and counter deltas need 2, so agents abstain rather than guess"]
 
 
 def _task(orch: _Orchestrator, ctx: IncidentContext, recipient: str, capability: str, peers: list[str]) -> Envelope:
