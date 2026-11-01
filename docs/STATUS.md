@@ -8,7 +8,7 @@ Times are relative to T0 (hackathon start); 24-hour event. **Deadline: TBD — c
 | # | Phase | Window | Deliverable | Status |
 |---|---|---|---|---|
 | 1 | Data contract (M1) | T0 → T+3h | frozen `netcoop/1.0`, raw generator data + field mapping, topology, REST proof, labels, dashboard mock | **ACCEPTED** by AI 3 (`83d6a7c`, tag `contract-1.0.1`) |
-| 2 | Specialist agents | T+7h → T+11h (replanned) | normalizer, Performance, Infrastructure, Connectivity (REST, consumes peer findings), thresholds, `netcoop run` | **IN PROGRESS** — tasks: `docs/PHASE2_TASKS.md` |
+| 2 | Specialist agents | T+7h → T+11h (replanned) | normalizer, Performance, Infrastructure, Connectivity (REST, consumes peer findings), thresholds, `netcoop run` | **READY FOR REVIEW** — pack: `PHASE2_REVIEW_PACK.md` (PM folder); acceptance tests: `tests/test_phase2_acceptance.py` |
 | 3 | Correlation + report | T+10h → T+14h (replanned) | `heuristic-v1`, decision gates, QUERY rounds (≤2), 0.9 compat, report actions + Markdown | NOT STARTED |
 | 4 | Robustness + evaluation | T+13h → T+17h | all 16 dev scenarios pass labels, held-out set, `netcoop eval` | NOT STARTED |
 | 5 | Dashboard (optional, encouraged) | T+10h → T+18h | event feed, ranking, evidence, report view on real runs | NOT STARTED |
@@ -51,3 +51,4 @@ Feature freeze at **T+18h**: after that only fixes to mandatory requirements or 
 - 2026-11-01 — AI 3: **REJECTED (narrow)**. Required: (1) architecture docs in repo, (2) schemas enforce model rules + parity test, (3) examples match topology/metrics, (4) tag `contract-1.0.1`. Fixes prepared on `m1/sayan-phase1-fixes`.
 - 2026-11-01 — Fixes merged in PR #11 (`83d6a7c`). Tagged **`contract-1.0.1` → `83d6a7c`** (`contract-1.0` left on `f0f4e94`). Fresh-clone re-run: 118 passed; regeneration clean; live REST rejects `bogus@X`, `yesterday`, no-timezone timestamps. Re-review pack sent to AI 3.
 - 2026-11-01 04:00 IST (≈T+7h) — **Phase 1 ACCEPTED by AI 3.** Phase 2 started ~4h behind the original plan; Phases 2–3 replanned to overlap. Deadline still unconfirmed (assumed T+24h ≈ 2026-11-01 20:50 IST).
+- 2026-11-01 — Phase 2 complete on main: agents (Performance, Infrastructure, Connectivity over HTTP), pipeline + `netcoop run`, normalizer, thresholds, 17 fixtures, dashboard CI. Connectivity stance bug fixed (PR #19). Close-out: threshold tests, 38 acceptance tests, untouched generator files accepted by `netcoop run` (sparse-telemetry limitation instead of guessing). Phase 2 → READY FOR REVIEW.

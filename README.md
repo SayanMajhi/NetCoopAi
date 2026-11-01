@@ -19,11 +19,19 @@ pytest -q
 
 ## Run
 ```bash
-netcoop --version
-netcoop export-schemas                              # regenerate schemas/ + PROTOCOL.md after editing models.py
-uvicorn connectivity_service.app:app --port 8001    # Connectivity agent as its own process
+# terminal 1 - the Connectivity agent as its own process
+uvicorn connectivity_service.app:app --port 8001
+
+# terminal 2 - diagnose a scenario (report -> reports/, trace with HTTP bodies -> traces/)
+netcoop run scenarios/dev/congestion.json
+netcoop run scenarios/dev/congestion.json --control   # Connectivity gets no peer findings: its answer changes
+netcoop run scenarios/dev/congestion.json --local     # Connectivity in-process (no server needed)
+netcoop run data/generator_raw/hardware_failure_unseeded.json   # untouched organizer output (1 reading: agents abstain and say why)
+
+netcoop export-schemas                    # regenerate schemas/ + PROTOCOL.md after editing models.py
+python scenarios/build_dev_fixtures.py    # rebuild the 17 labelled scenarios in scenarios/dev/
 ```
-Coming in later phases: `netcoop run <scenario>` (end-to-end diagnosis) and `netcoop eval --n 50 --noise` (held-out evaluation).
+Until Phase 3 adds correlation, every report ends in `insufficient_evidence` and lists the agents' findings; the trace shows each agent's evidence and Connectivity's use of its peers. Coming next: a named cause with `heuristic-v1` confidence (Phase 3) and `netcoop eval` (Phase 4).
 
 ## How it works
 | Component | Role |
