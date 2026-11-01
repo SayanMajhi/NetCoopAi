@@ -10,7 +10,8 @@ from typing import Any, Optional
 
 from netcoop.agents.base import BaseAgent, IncidentContext
 from netcoop.agents.correlation import Candidate, _Topo
-from netcoop.protocol.models import Envelope, EvidenceItem, Report, Status
+from netcoop.normalizer.normalize import COUNTERS
+from netcoop.protocol.models import Envelope, EvidenceItem, Observation, Report, Status
 
 # Practical, read-only-first actions per cause; {t} is the target, {d} the affected device.
 ACTIONS: dict[str, list[str]] = {
@@ -113,8 +114,24 @@ class ReportingAgent(BaseAgent):
             if per_series[key] > 3:
                 continue
             items.append(EvidenceItem(evidence_id=o.evidence_id, metric=o.metric, value=o.value, unit=o.unit,
-                                      source_id=o.source_id))
+                                      source_id=o.source_id, interval_delta=_interval_delta(ctx, o)))
         return items
+
+
+def _interval_delta(ctx: IncidentContext, o: Observation) -> Optional[float]:
+    """A cumulative counter means little alone (Phase 2 review P2-1): the increase since the previous
+    sample of the same target, metric and source. None after a gap or on a reset, never a negative number."""
+    if o.metric not in COUNTERS or not isinstance(o.value, (int, float)) or isinstance(o.value, bool) \
+            or "counter_reset" in o.quality_flags:
+        return None
+    target = o.device_id or o.link_id
+    earlier = sorted((x for x in ctx.observations if x.metric == o.metric and x.source_id == o.source_id
+                      and (x.device_id or x.link_id) == target and x.observed_at < o.observed_at),
+                     key=lambda x: (x.observed_at, x.evidence_id))
+    if not earlier or not isinstance(earlier[-1].value, (int, float)) or isinstance(earlier[-1].value, bool):
+        return None
+    delta = o.value - earlier[-1].value
+    return round(delta, 3) if delta >= 0 else None
 
 
 def _actions(c: Candidate, topo: _Topo) -> list[str]:
@@ -148,6 +165,12 @@ def _unique(items: list[str]) -> list[str]:
     return [i for i in items if not (i in seen or seen.add(i))]
 
 
+def _delta_text(e: EvidenceItem) -> str:
+    if e.metric not in COUNTERS:
+        return ""
+    return f"+{e.interval_delta:g}" if e.interval_delta is not None else "n/a (first sample, gap or reset)"
+
+
 def to_markdown(report: Report) -> str:
     """Human-readable view of the same report (no extra conclusions)."""
     r = report
@@ -159,8 +182,9 @@ def to_markdown(report: Report) -> str:
     if r.affected_devices or r.affected_segments:
         lines.append(f"**Affected:** {', '.join(r.affected_segments + r.affected_devices)}")
     if r.supporting_evidence:
-        lines += ["", "## Evidence", "", "| ID | metric | value | source |", "|---|---|---|---|"]
-        lines += [f"| {e.evidence_id} | {e.metric} | {e.value} {e.unit} | {e.source_id} |" for e in r.supporting_evidence]
+        lines += ["", "## Evidence", "", "| ID | metric | value | per interval | source |", "|---|---|---|---|---|"]
+        lines += [f"| {e.evidence_id} | {e.metric} | {e.value} {e.unit} | {_delta_text(e)} | {e.source_id} |"
+                  for e in r.supporting_evidence]
     for title, items in (("Alternative causes", r.alternative_causes), ("Recommended actions", r.recommended_actions),
                          ("Limitations", r.limitations), ("Validation errors", r.validation_errors),
                          ("Normalization", r.normalization_log[:10])):

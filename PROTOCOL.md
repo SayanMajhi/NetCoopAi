@@ -29,7 +29,7 @@ The typed models in [`netcoop/protocol/models.py`](netcoop/protocol/models.py) a
 
 ## Versioning and compatibility
 
-Contract tags: `contract-1.0` (wire contract), `contract-1.0.1` (schemas enforce the model rules), `contract-1.0.2` (Phase 2 review: `sender`/`recipient` must be non-empty; the "Reading `stance`" rule above is part of the contract). All are `netcoop/1.0`: the changes only reject inputs that were already invalid in meaning.
+Contract tags: `contract-1.0` (wire contract), `contract-1.0.1` (schemas enforce the model rules), `contract-1.0.2` (Phase 2 review: `sender`/`recipient` must be non-empty; the "Reading `stance`" rule above is part of the contract). All are `netcoop/1.0`: the changes only reject inputs that were already invalid in meaning. `contract-1.0.3` (Phase 4, P4-1) adds one optional field, `EvidenceItem.interval_delta` (per-interval increase of a cumulative counter; null otherwise). It is additive: every 1.0.2 report is still valid, but strict readers built from the 1.0.2 schemas must regenerate (`netcoop export-schemas`, `npm run gen:types`) before they accept 1.0.3 reports.
 
 Receivers validate with the exported JSON Schema **and** the typed models: Python's `jsonschema` lets a `$` pattern match before a final newline, so the models (Rust regex) are the stricter second check. A message that fails either is a typed `ERROR`, never logged as valid.
 | Incoming | Behaviour |
@@ -164,6 +164,7 @@ _Generated from `netcoop/protocol/models.py` (netcoop/1.0). Do not edit by hand.
 | `value` | number / string / boolean / null | yes |  |
 | `unit` | string | yes |  |
 | `source_id` | string | yes |  |
+| `interval_delta` | number / null | no | Cumulative counters only: increase since the previous sample of the same series. Null for non-counters, the first sample, after a gap, or on a counter reset |
 
 ### Report
 

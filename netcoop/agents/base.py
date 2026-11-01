@@ -28,6 +28,7 @@ class IncidentContext:
     signatures: dict[str, Any]            # parsed netcoop/config/signatures-1.0.yaml
     normalization_log: list[str] = field(default_factory=list)
     on_demand: list[Observation] = field(default_factory=list)   # probe samples, released by probe()
+    complaint: str = ""                   # the operator's free-text report; scopes the healthy gate
 
     def __post_init__(self) -> None:
         if self.clock.tzinfo is None:

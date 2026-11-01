@@ -34,6 +34,8 @@ insufficient_evidence.
 """
 from __future__ import annotations
 
+import re
+
 import math
 from dataclasses import dataclass, field
 from datetime import timedelta
@@ -443,6 +445,7 @@ class CorrelationAgent(BaseAgent):
             status = Status.diagnosed
         elif healthy:
             status = Status.healthy
+            limitations += healthy_notes
         elif corroborated and leader.confidence >= 0.50:
             status = Status.probable
             limitations += _not_diagnosed(leader, rival, lead)
@@ -602,10 +605,47 @@ def _severity(cause: str, evidence: list[Observation], ctx: IncidentContext) -> 
     return 0.5, "severity not judged"
 
 
+_GENERIC_WORDS = {"access", "switch", "distribution", "department", "hostel", "block", "campus", "core",
+                  "router", "server", "dns", "dhcp"}
+
+
+def _area(ctx: IncidentContext) -> tuple[Optional[set[str]], list[str]]:
+    """The part of the network the complaint is about (Phase 2 review P2-2): topology nodes or links it names
+    by ID, zone, or a distinctive label word ("Library", "CSE"), plus their path to the core, what sits behind
+    them, and the DNS/DHCP servers. None (the whole network) when the complaint names nothing in the topology."""
+    topo = _Topo(ctx.topology)
+    words = set(re.findall(r"[a-z0-9_]+", ctx.complaint.lower()))
+    named: set[str] = set()
+    for nid, node in topo.nodes.items():
+        label = {w for w in re.findall(r"[a-z0-9]+", str(node.get("label", "")).lower())
+                 if len(w) >= 3 and w not in _GENERIC_WORDS}
+        if nid.lower() in words or str(node.get("zone", "")).lower() in words or (label and label <= words):
+            named.add(nid)
+    for lid, link in topo.links.items():
+        if lid.lower() in words:
+            named.update((link["a"], link["b"]))
+    if not named:
+        return None, []
+    area = set(named)
+    for nid in sorted(named):
+        area.update(topo.downstream(nid))
+    for nid in sorted(area) + [s for svc in ("dns", "dhcp") for s in topo.servers(svc)]:
+        node = nid
+        while node in topo.parent_link:              # path up to the core, links included
+            link = topo.parent_link[node]
+            area.update((link, topo.links[link]["a"], node))
+            node = topo.links[link]["a"]
+    area.update(lid for lid, l in topo.links.items() if l["b"] in area and l["a"] in area)
+    return area, sorted(named)
+
+
 def _healthy(ctx: IncidentContext, ranked: list[Candidate]) -> tuple[bool, float, list[str]]:
     """The healthy gate (ARCHITECTURE §4): explicit normal measurements and passing checks."""
     ev = _Evidence(ctx)
     notes: list[str] = []
+    area, named = _area(ctx)
+    stale = [o for o in ev.stale if area is None or (o.device_id or o.link_id) in area]
+    outside = sorted({o.device_id or o.link_id for o in ev.stale if o not in stale})
     perf = [o for o in ev.fresh if o.metric in PERFORMANCE_METRICS]
     infra = [o for o in ev.fresh if o.metric in INFRA_METRICS]
     services = [o for o in ev.fresh if o.metric in ("dns_success", "dhcp_success")]
@@ -618,7 +658,8 @@ def _healthy(ctx: IncidentContext, ranked: list[Candidate]) -> tuple[bool, float
         "fresh infrastructure measurements": bool(infra),
         "service checks (DNS/DHCP) present and passing": bool(services) and all(_bool(o) is True for o in services),
         "path checks (reachability) present and passing": bool(paths) and all(_bool(o) is True for o in paths),
-        "no missing or stale data": not ev.stale,
+        ("no missing or stale data" if area is None else
+         f"no missing or stale data in the area in question ({', '.join(named)} and its path)"): not stale,
         "no candidate passes all its required checks": not any(c.required_pass for c in ranked),
     }
     for name, ok in conditions.items():
@@ -627,9 +668,13 @@ def _healthy(ctx: IncidentContext, ranked: list[Candidate]) -> tuple[bool, float
     met = sum(conditions.values()) / len(conditions)
     sources = {o.source_id for o in perf + infra + services + paths}
     raw = 0.40 * (1.0 if perf_normal else 0.0) + 0.25 * (1.0 if paths and conditions[
-        "path checks (reachability) present and passing"] else 0.0) + 0.20 * (0.0 if ev.stale else 1.0) \
+        "path checks (reachability) present and passing"] else 0.0) + 0.20 * (0.0 if stale else 1.0) \
         + 0.15 * (1.0 if len(sources) >= 2 else 0.0)
-    return all(conditions.values()), round(raw * met, 2), notes
+    ok = all(conditions.values())
+    if ok and outside:
+        notes.append(f"healthy is scoped to the area in question ({', '.join(named)} and its path); missing or stale "
+                     f"data outside it was not used: {', '.join(outside)}")
+    return ok, round(raw * met, 2), notes
 
 
 def _not_diagnosed(leader: Candidate, rival: Optional[Candidate], lead: float) -> list[str]:

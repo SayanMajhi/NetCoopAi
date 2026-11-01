@@ -41,7 +41,8 @@ RAW_METRICS: dict[str, tuple[str, str, float]] = {
     "reachability": ("reachability", "boolean", 1),
 }
 _BOOLEANS = {"dns_success", "dhcp_success", "reachability"}
-_COUNTERS = {"queue_drops", "interface_errors", "link_flap_count"}
+COUNTERS = {"queue_drops", "interface_errors", "link_flap_count"}   # cumulative: judged per interval
+_COUNTERS = COUNTERS
 _PERCENTAGES = {"cpu_pct", "memory_pct", "link_utilization_pct", "packet_loss_pct", "retry_rate_pct"}
 _WRAPPER_KEYS = {"incident_id", "window_end", "complaint", "records", "messages", "inject", "on_query"}
 ON_DEMAND_PREFIX = "on-demand"   # source_id of probe samples that are run only when a QUERY asks

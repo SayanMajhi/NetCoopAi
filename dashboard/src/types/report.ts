@@ -38,6 +38,10 @@ export type SignatureVersion = string;
  */
 export type Status = "diagnosed" | "probable" | "healthy" | "insufficient_evidence" | "invalid_input" | "failed";
 export type EvidenceId = string;
+/**
+ * Cumulative counters only: increase since the previous sample of the same series. Null for non-counters, the first sample, after a gap, or on a counter reset
+ */
+export type IntervalDelta = number | null;
 export type Metric = string;
 export type SourceId = string;
 export type Unit = string;
@@ -52,6 +56,7 @@ export type ValidationErrors = string[];
  */
 export interface EvidenceItem {
   evidence_id: EvidenceId;
+  interval_delta?: IntervalDelta;
   metric: Metric;
   source_id: SourceId;
   unit: Unit;
