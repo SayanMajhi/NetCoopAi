@@ -18,6 +18,7 @@ SIGNATURES = {"window": {"minutes": 5, "congestion_min_consecutive_samples": 3},
     "jitter_ms": {"warn": 20, "critical": 50},
     "packet_loss_pct": {"warn": 1.0, "critical": 3.0},
     "throughput_mbps": {"warn": 0.5, "critical": 0.25},
+    "queue_drops": {"warn": 10, "critical": 100},
 }}
 
 
@@ -78,6 +79,17 @@ class PerformanceTests(unittest.TestCase):
         self.assertEqual("supports", findings[0].payload["stance"])
         self.assertIn("queue-drop counter rose", findings[0].payload["reason"])
         self.assertTrue(any(ctx.evidence(eid).metric == "queue_drops" for eid in findings[0].payload["evidence_ids"]))
+
+    def test_background_drop_growth_below_warn_does_not_corroborate(self):
+        # Phase 3 re-review P4-0a: +5 per interval is normal background growth, below queue_drops.warn (10)
+        _, _, findings = _run(_fixture([95, 96, 97, 96, 95], drops=[100, 105, 110, 115, 120]))
+        self.assertEqual([], findings)
+
+    def test_no_queue_drops_threshold_means_no_drop_corroboration(self):
+        signatures = {**SIGNATURES, "thresholds": {k: v for k, v in SIGNATURES["thresholds"].items()
+                                                   if k != "queue_drops"}}
+        _, _, findings = _run(_fixture([95, 96, 97, 96, 95], drops=[100, 150, 200, 250, 300]), signatures)
+        self.assertEqual([], findings)
 
     def test_unrelated_latency_does_not_corroborate_hostel_link(self):
         fixture = _fixture([95, 96, 97, 96, 95])

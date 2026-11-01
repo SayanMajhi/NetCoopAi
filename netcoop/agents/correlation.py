@@ -86,6 +86,7 @@ class Candidate:
     corroborating: list[Check] = field(default_factory=list)
     contradicting_checks: list[Check] = field(default_factory=list)
     min_matches: int = 0
+    corroboration_need: str = ""   # e.g. "queue_drops rising >= 10/interval or latency above 100 ms"
     severity: float = 0.5
     verified: Optional[str] = None
     factors: dict[str, float] = field(default_factory=dict)
@@ -103,6 +104,11 @@ class Candidate:
     @property
     def required_pass(self) -> bool:
         return bool(self.required) and all(c.state == "pass" for c in self.required)
+
+    @property
+    def corroboration_met(self) -> bool:
+        """ARCHITECTURE 3: e.g. congestion needs high utilization *plus* queue-drop/latency corroboration."""
+        return sum(c.state == "pass" for c in self.corroborating) >= self.min_matches
 
     @property
     def refuted(self) -> bool:
@@ -263,6 +269,7 @@ class CorrelationAgent(BaseAgent):
         corr = sig.get("corroborating") or {}
         cand.min_matches = int(corr.get("min_matches") or 0)
         cand.corroborating = [self._item(i, cand.target, ctx, topo, ev) for i in corr.get("checks") or []]
+        cand.corroboration_need = " or ".join(_describe(i, ctx) for i in corr.get("checks") or [])
         cand.contradicting_checks = [self._item(i, cand.target, ctx, topo, ev) for i in sig.get("contradicting") or []]
 
     def _item(self, item: dict[str, Any], target: str, ctx: IncidentContext, topo: _Topo, ev: _Evidence) -> Check:
@@ -430,12 +437,13 @@ class CorrelationAgent(BaseAgent):
                                f"ranked by signature evidence strength (signal_fit {leader.factors['signal_fit']} vs "
                                f"{rival.factors['signal_fit']})")
 
-        if leader and leader.required_pass and leader.confidence >= 0.70 and leader.coverage >= 0.75 \
+        corroborated = bool(leader) and leader.corroboration_met
+        if corroborated and leader.required_pass and leader.confidence >= 0.70 and leader.coverage >= 0.75 \
                 and leader.factors["independent_source_fit"] == 1.0 and lead >= CLOSE and not unresolved:
             status = Status.diagnosed
         elif healthy:
             status = Status.healthy
-        elif leader and leader.confidence >= 0.50:
+        elif corroborated and leader.confidence >= 0.50:
             status = Status.probable
             limitations += _not_diagnosed(leader, rival, lead)
         else:
@@ -626,6 +634,8 @@ def _healthy(ctx: IncidentContext, ranked: list[Candidate]) -> tuple[bool, float
 
 def _not_diagnosed(leader: Candidate, rival: Optional[Candidate], lead: float) -> list[str]:
     out = []
+    if not leader.corroboration_met:
+        out.append(f"{leader.hypothesis}: corroboration not met (needs {leader.corroboration_need})")
     unmet = [c.name for c in leader.required if c.state != "pass"]
     if unmet:
         out.append(f"{leader.hypothesis}: required check(s) not met: {', '.join(unmet)}")
@@ -640,6 +650,21 @@ def _not_diagnosed(leader: Candidate, rival: Optional[Candidate], lead: float) -
     if not out:
         out.append(f"{leader.hypothesis}: not diagnosed while an unassessed rival remains open")
     return out
+
+
+def _describe(item: dict[str, Any], ctx: IncidentContext) -> str:
+    """Plain words for one corroborating check, with the YAML threshold it is judged against."""
+    if "any_of" in item:
+        return " or ".join(_describe(i, ctx) for i in item["any_of"])
+    metric, check = item["metric"], item["check"]
+    warn = ctx.threshold(metric).get("warn")
+    unit = " ms" if metric.endswith("_ms") else " %" if metric.endswith("_pct") else ""
+    name = metric[:-3] if unit == " ms" else metric
+    if check == "rising_delta" and warn is not None:
+        return f"{metric} rising \u2265 {warn:g}/interval"
+    if check == "above_warn" and warn is not None:
+        return f"{name} above {warn:g}{unit}"
+    return f"{metric} {check}"
 
 
 def _dedupe(findings: list[Envelope]) -> list[Envelope]:
