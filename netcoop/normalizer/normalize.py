@@ -20,16 +20,25 @@ RAW_METRICS: dict[str, tuple[str, str, float]] = {
     "cpu_utilization_pct": ("cpu_pct", "percent", 1),
     "cpu_pct": ("cpu_pct", "percent", 1),
     "memory_pct": ("memory_pct", "percent", 1),
+    "memory_utilization_pct": ("memory_pct", "percent", 1),
     "link_utilization_pct": ("link_utilization_pct", "percent", 1),
     "packet_loss_pct": ("packet_loss_pct", "percent", 1),
     "latency_ms": ("latency_ms", "ms", 1),
+    "ping_ms": ("latency_ms", "ms", 1),
+    "rtt_ms": ("latency_ms", "ms", 1),
     "rtt_sec": ("latency_ms", "ms", 1000),
+    "rtt_s": ("latency_ms", "ms", 1000),
+    "latency_s": ("latency_ms", "ms", 1000),
+    "latency_sec": ("latency_ms", "ms", 1000),
     "jitter_ms": ("jitter_ms", "ms", 1),
+    "jitter_s": ("jitter_ms", "ms", 1000),
+    "jitter_sec": ("jitter_ms", "ms", 1000),
     "throughput_mbps": ("throughput_mbps", "Mbps", 1),
     "throughput_kbps": ("throughput_mbps", "Mbps", 0.001),
     "capacity_mbps": ("capacity_mbps", "Mbps", 1),
     "queue_drops": ("queue_drops", "count", 1),
     "interface_errors": ("interface_errors", "count", 1),
+    "crc_errors": ("interface_errors", "count", 1),
     "link_flap_count": ("link_flap_count", "count", 1),
     "interface_oper_status": ("interface_oper_status", "state", 1),
     "rssi_dbm": ("rssi_dbm", "dBm", 1),
@@ -110,11 +119,23 @@ def normalize(fixture: dict, topology: dict, signatures: dict) -> NormalizationR
     result.on_demand = [o.model_copy(update={"evidence_id": f"EV-{start + i:03d}"})
                         for i, o in enumerate(probe.observations, 1)]
     result.normalization_log += [f"on_query {line}" for line in probe.normalization_log]
+    result.skipped += [_prefixed(entry, "on_query: ") for entry in probe.skipped]
+    result.suspect += [f"on_query: {entry}" for entry in probe.suspect]
     return result
 
 
+def _prefixed(entry: str, prefix: str) -> str:
+    """Insert `prefix` after the error code of a typed skip entry ("CODE detail")."""
+    code, _, detail = entry.partition(" ")
+    return f"{code} {prefix}{detail}"
+
+
 def _normalize_window(fixture: dict, topology: dict, signatures: dict) -> NormalizationResult:
-    """Return evidence or field-level errors; never raise for bad fixture data."""
+    """Return evidence or field-level errors; never raise for bad fixture data.
+
+    One bad field or record does not sink the incident: an unknown metric or key, or a record
+    without a usable timestamp, target, source or metrics, is skipped and named in `skipped`
+    (typed MISSING_FIELD / INVALID_VALUE). Only a broken wrapper, or nothing usable left, is fatal."""
     document, errors = _load(fixture)
     result = NormalizationResult(validation_errors=errors)
     if errors:
@@ -123,7 +144,7 @@ def _normalize_window(fixture: dict, topology: dict, signatures: dict) -> Normal
         unknown = set(document) - _WRAPPER_KEYS
         records = document.get("records")
         if unknown:
-            result.validation_errors.append(f"fixture: unknown fields {sorted(unknown)}")
+            result.skipped.append(f"INVALID_VALUE fixture: unknown fields {sorted(unknown)}; ignored")
         result.window_end = _timestamp(document.get("window_end"))
         if result.window_end is None:
             result.validation_errors.append("window_end: required timezone-aware timestamp")
@@ -151,42 +172,44 @@ def _normalize_window(fixture: dict, topology: dict, signatures: dict) -> Normal
     node_ids = {n.get("id") for n in nodes if isinstance(n, dict)}
     link_by_id = {link.get("link_id"): link for link in links if isinstance(link, dict)}
     rows: list[dict[str, Any]] = []
-    timestamps: list[datetime] = []
+    skip = result.skipped.append
     for number, record in enumerate(records, 1):
         prefix = f"records[{number - 1}]"
         if not isinstance(record, dict):
-            result.validation_errors.append(f"{prefix}: expected an object")
+            skip(f"INVALID_VALUE {prefix}: expected an object; record skipped")
             continue
         unknown = set(record) - _RECORD_KEYS
         if unknown:
-            result.validation_errors.append(f"{prefix}: unknown fields {sorted(unknown)}")
+            skip(f"INVALID_VALUE {prefix}: unknown fields {sorted(unknown)}; ignored, rest of the record kept")
         observed_at = _timestamp(record.get("timestamp"))
         if observed_at is None:
-            result.validation_errors.append(f"{prefix}.timestamp: required timezone-aware timestamp")
+            code = "MISSING_FIELD" if record.get("timestamp") is None else "INVALID_VALUE"
+            skip(f"{code} {prefix}.timestamp: required timezone-aware timestamp; record skipped")
             continue
         raw_ts = record.get("timestamp")
         if not raw_ts.endswith(("Z", "+00:00")):      # C5: non-UTC offsets are converted, and the log says so
             result.normalization_log.append(f"{prefix}.timestamp {raw_ts} converted to UTC {observed_at.isoformat()}")
-        timestamps.append(observed_at)
         device_id, link_id = record.get("device_id"), record.get("link_id")
         if bool(device_id) == bool(link_id) or not isinstance(device_id or link_id, str):
-            result.validation_errors.append(f"{prefix}: exactly one device_id or link_id is required")
+            code = "MISSING_FIELD" if not device_id and not link_id else "INVALID_VALUE"
+            skip(f"{code} {prefix}: exactly one device_id or link_id is required; record skipped")
             continue
         target = device_id or link_id
         if target not in (node_ids if device_id else link_by_id):
-            result.validation_errors.append(f"{prefix}: unknown topology target {target!r}")
+            skip(f"INVALID_VALUE {prefix}: unknown topology target {target!r}; record skipped")
             continue
         source = record.get("source_id", "organizer-generator")
         if not isinstance(source, str) or not source:
-            result.validation_errors.append(f"{prefix}.source_id: expected a nonempty string")
+            skip(f"INVALID_VALUE {prefix}.source_id: expected a nonempty string; record skipped")
             continue
         metrics = record.get("metrics")
         if not isinstance(metrics, dict) or not metrics:
-            result.validation_errors.append(f"{prefix}.metrics: expected a nonempty object")
+            code = "MISSING_FIELD" if metrics is None else "INVALID_VALUE"
+            skip(f"{code} {prefix}.metrics: expected a nonempty object; record skipped")
             continue
         for raw_name, raw in metrics.items():
             if raw_name not in RAW_METRICS:
-                result.validation_errors.append(f"{prefix}.metrics.{raw_name}: unknown raw metric")
+                skip(f"INVALID_VALUE {prefix}.metrics.{raw_name}: unknown raw metric; skipped")
                 continue
             metric, unit, multiplier = RAW_METRICS[raw_name]
             value, flags = _value(raw, metric, multiplier)
@@ -207,9 +230,13 @@ def _normalize_window(fixture: dict, topology: dict, signatures: dict) -> Normal
                 "normalization_steps": steps, "quality_flags": flags or ["ok"],
                 "_target": target, "_ordinal": len(rows),
             })
-    if result.window_end is None and timestamps:
-        result.window_end = max(timestamps)
-    if result.validation_errors:
+    if result.window_end is None and rows:
+        result.window_end = max(row["observed_at"] for row in rows)
+    if not rows and not result.validation_errors:
+        result.validation_errors.append("records: no usable telemetry left after skipping the items above")
+    if result.validation_errors:              # fatal: name every skipped item too, first
+        result.validation_errors[:0] = result.skipped
+        result.skipped = []
         return result
     assert result.window_end is not None
     minutes = signatures.get("window", {}).get("minutes", 5)
@@ -223,6 +250,7 @@ def _normalize_window(fixture: dict, topology: dict, signatures: dict) -> Normal
             result.normalization_log.append(f"{row['_target']} {row['metric']} at {row['observed_at'].isoformat()}: outside incident window")
     _utilization(rows, link_by_id, result.normalization_log, signatures)
     _counter_resets(rows, result.normalization_log)
+    _fraction_utilization(rows, result)
     rows.sort(key=lambda r: (r["_target"], r["metric"], r["observed_at"], r["source_id"], r["original_field"], r["_ordinal"]))
     for index, row in enumerate(rows, 1):
         clean = {k: v for k, v in row.items() if not k.startswith("_")}
@@ -297,6 +325,21 @@ def _utilization(rows: list[dict[str, Any]], links: dict[str, dict], log: list[s
             "quality_flags": flags, "_target": target, "_ordinal": len(rows),
         })
         log.append(f"{target} at {observed_at.isoformat()}: derived utilization {derived:g}% from throughput/capacity")
+
+
+def _fraction_utilization(rows: list[dict[str, Any]], result: NormalizationResult) -> None:
+    """A 0-1 fraction sent as percent reads as an idle link. The scale is not guessed or converted,
+    but a link whose every measured sample lies in (0, 1] is named in `suspect`."""
+    series: dict[str, list[float]] = {}
+    for row in rows:
+        if row["metric"] == "link_utilization_pct" and "derived" not in row["quality_flags"] and row["value"] is not None:
+            series.setdefault(row["_target"], []).append(row["value"])
+    for target, values in sorted(series.items()):
+        if len(values) >= 2 and all(0 < v <= 1 for v in values):
+            note = (f"{target} link_utilization_pct: all {len(values)} samples lie between 0 and 1, so they may be "
+                    "a 0-1 fraction rather than percent; kept as percent, not converted")
+            result.suspect.append(note)
+            result.normalization_log.append(note)
 
 
 def _counter_resets(rows: list[dict[str, Any]], log: list[str]) -> None:

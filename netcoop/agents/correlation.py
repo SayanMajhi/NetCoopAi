@@ -676,6 +676,10 @@ def _healthy(ctx: IncidentContext, ranked: list[Candidate]) -> tuple[bool, float
         "path checks (reachability) present and passing"] else 0.0) + 0.20 * (0.0 if stale else 1.0) \
         + 0.15 * (1.0 if len(sources) >= 2 else 0.0)
     ok = all(conditions.values())
+    if ctx.input_warnings:      # a skipped or mis-scaled reading may be exactly where the fault is
+        ok = False
+        notes.append(f"healthy not shown: {len(ctx.input_warnings)} input item(s) were skipped or look mis-scaled, "
+                     "so the fault could be in data that was not read")
     if ok and outside:
         notes.append(f"healthy is scoped to the area in question ({', '.join(named)} and its path); missing or stale "
                      f"data outside it was not used: {', '.join(outside)}")
