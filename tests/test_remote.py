@@ -58,7 +58,8 @@ def test_real_service_round_trip_keeps_both_bodies() -> None:
     assert reply.request_body == bundle().model_dump(mode="json")
     assert reply.response_body == {"messages": reply.messages}
     supports = [m["payload"]["hypothesis"] for m in reply.messages if m["payload"]["stance"] == "supports"]
-    assert supports == ["healthy@HOSTEL_UPLINK_01"]
+    assert supports == []                                # no peers: no campus-wide health claim (R1)
+    assert reply.messages                                # the DNS view still comes back
 
 
 def test_endpoint_trailing_slash_is_fine() -> None:
@@ -175,8 +176,8 @@ def test_pipeline_over_http_traces_bodies_and_control_differs() -> None:
         return {f.payload["hypothesis"] for f in result.findings
                 if f.sender == "connectivity_agent" and f.payload["stance"] == "supports"}
 
-    assert "upstream_dependency@HOSTEL_UPLINK_01" in conn(normal)
-    assert conn(control) == {"healthy@HOSTEL_UPLINK_01"}
+    assert "link_congestion@HOSTEL_UPLINK_01" in conn(normal)       # scope of the Infrastructure finding
+    assert conn(control) == set()
     assert len(normal.wire[0]["request"]["messages"]) > 1 and len(control.wire[0]["request"]["messages"]) == 1
 
 

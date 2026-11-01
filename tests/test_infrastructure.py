@@ -34,10 +34,13 @@ def find(payloads, hypothesis: str, stance: str = "supports") -> list[dict[str, 
 
 
 ERRORS_RISING = ("DEPT_UPLINK_01", "interface_errors", [100, 140, 190, 260, 340])
+# The interface_fault signature needs packet loss downstream of the target too.
+DEPT_LOSS = ("SW_CAMPUS_8", "packet_loss_pct", [3, 4, 5, 4, 6])
+ACC7_LOSS = ("SW_CAMPUS_7", "packet_loss_pct", [3, 4, 5, 4, 6])
 
 
 def test_interface_errors_with_normal_utilization_contradict_congestion() -> None:
-    out = run([ERRORS_RISING, ("DEPT_UPLINK_01", "link_utilization_pct", [35, 38, 36, 40, 37])])
+    out = run([ERRORS_RISING, ("DEPT_UPLINK_01", "link_utilization_pct", [35, 38, 36, 40, 37]), DEPT_LOSS])
     assert find(out, "interface_fault@DEPT_UPLINK_01")
     contra = find(out, "interface_fault@DEPT_UPLINK_01", "contradicts")
     assert contra and contra[0]["target_hypothesis"] == "link_congestion@DEPT_UPLINK_01"
@@ -45,7 +48,7 @@ def test_interface_errors_with_normal_utilization_contradict_congestion() -> Non
 
 
 def test_ambiguous_congestion_errors_emits_contradicts() -> None:
-    out = run([ERRORS_RISING, ("DEPT_UPLINK_01", "link_utilization_pct", [93, 95, 96, 94, 97])])
+    out = run([ERRORS_RISING, ("DEPT_UPLINK_01", "link_utilization_pct", [93, 95, 96, 94, 97]), DEPT_LOSS])
     contra = find(out, "interface_fault@DEPT_UPLINK_01", "contradicts")
     assert contra and contra[0]["target_hypothesis"] == "link_congestion@DEPT_UPLINK_01"
     assert contra[0]["score"] == 0.4
@@ -53,7 +56,7 @@ def test_ambiguous_congestion_errors_emits_contradicts() -> None:
 
 def test_errors_on_a_device_check_its_attached_links() -> None:
     out = run([("SW_CAMPUS_7", "interface_errors", [0, 30, 70, 120, 180]),
-               ("ACC_LINK_07", "link_utilization_pct", [20, 22, 21, 25, 23])])
+               ("ACC_LINK_07", "link_utilization_pct", [20, 22, 21, 25, 23]), ACC7_LOSS])
     assert find(out, "interface_fault@SW_CAMPUS_7")
     assert [p["target_hypothesis"] for p in find(out, "interface_fault@SW_CAMPUS_7", "contradicts")] == \
         ["link_congestion@ACC_LINK_07"]
@@ -84,7 +87,7 @@ def test_missing_values_are_ignored_not_zero() -> None:
 
 
 def test_link_flaps_support_interface_fault() -> None:
-    out = run([("ACC_LINK_07", "link_flap_count", [0, 1, 2, 4, 5])])
+    out = run([("ACC_LINK_07", "link_flap_count", [0, 1, 2, 4, 5]), ACC7_LOSS])
     assert find(out, "interface_fault@ACC_LINK_07")[0]["score"] == 0.8
 
 
@@ -125,14 +128,14 @@ def test_weak_wifi_grey_zone_and_strong_signal() -> None:
 def test_counter_critical_is_per_interval_not_window_total() -> None:
     steady = ("DEPT_UPLINK_01", "interface_errors", [0, 40, 80, 120, 160])     # +40 each, 160 total
     assert peak_delta(observations([steady])) == 40
-    assert find(run([steady]), "interface_fault@DEPT_UPLINK_01")[0]["score"] == 0.6   # critical is 100
+    assert find(run([steady, DEPT_LOSS]), "interface_fault@DEPT_UPLINK_01")[0]["score"] == 0.6   # critical is 100
     burst = ("DEPT_UPLINK_01", "interface_errors", [0, 1, 2, 3, 120])
-    assert find(run([burst]), "interface_fault@DEPT_UPLINK_01")[0]["score"] == 0.8
+    assert find(run([burst, DEPT_LOSS]), "interface_fault@DEPT_UPLINK_01")[0]["score"] == 0.8
 
 
 def test_ambiguous_case_with_real_yaml_thresholds() -> None:
     real = signatures(thresholds={})                 # signatures-1.0.yaml as committed
-    out = run([ERRORS_RISING, ("DEPT_UPLINK_01", "link_utilization_pct", [93, 95, 96, 94, 97])], sig=real)
+    out = run([ERRORS_RISING, ("DEPT_UPLINK_01", "link_utilization_pct", [93, 95, 96, 94, 97]), DEPT_LOSS], sig=real)
     assert find(out, "interface_fault@DEPT_UPLINK_01")[0]["score"] == 0.8
     contra = find(out, "interface_fault@DEPT_UPLINK_01", "contradicts")
     assert contra and contra[0]["target_hypothesis"] == "link_congestion@DEPT_UPLINK_01"
@@ -143,13 +146,39 @@ def test_null_thresholds_make_checks_unavailable_not_crash() -> None:
     for metric in sig["thresholds"]:
         sig["thresholds"][metric].update(warn=None, critical=None)
     out = run([ERRORS_RISING, ("DEPT_UPLINK_01", "link_utilization_pct", [35, 38, 36, 40, 37]),
-               ("SW_CAMPUS_2", "cpu_pct", [99, 99, 99, 99, 99])], sig=sig)
-    assert find(out, "interface_fault@DEPT_UPLINK_01")              # any positive delta still rises
+               ("SW_CAMPUS_2", "cpu_pct", [99, 99, 99, 99, 99]), DEPT_LOSS], sig=sig)
+    assert not find(out, "interface_fault@DEPT_UPLINK_01")          # loss check unavailable: never a pass
     assert not find(out, "interface_fault@DEPT_UPLINK_01", "contradicts")
     assert not find(out, "device_overload@SW_CAMPUS_2")
 
 
 def test_deterministic_ids() -> None:
-    spec = [ERRORS_RISING, ("DEPT_UPLINK_01", "link_utilization_pct", [35, 38, 36, 40, 37])]
+    spec = [ERRORS_RISING, ("DEPT_UPLINK_01", "link_utilization_pct", [35, 38, 36, 40, 37]), DEPT_LOSS]
     assert run(spec) == run(spec)
     assert [p["finding_id"] for p in run(spec)] == ["F-INF-01", "F-INF-02"]
+
+
+# --------------------------------------------------------------------------- Phase 2 review (R4, C7)
+
+def test_errors_without_downstream_loss_are_not_a_fault() -> None:
+    """Rising errors alone are background noise; the signature also needs downstream loss."""
+    out = run([ERRORS_RISING, ("SW_CAMPUS_8", "packet_loss_pct", [0, 0, 0.2, 0, 0])])
+    assert not find(out, "interface_fault@DEPT_UPLINK_01")
+    assert not find(out, "interface_fault@DEPT_UPLINK_01", "contradicts")
+
+
+def test_background_counter_ticking_is_not_a_fault() -> None:
+    """+0..2 errors and +0..5 drops per minute on a healthy, lossless network (real YAML)."""
+    real = signatures(thresholds={})
+    out = run([("DEPT_UPLINK_01", "interface_errors", [12, 14, 15, 15, 17]),
+               ("HOSTEL_UPLINK_01", "interface_errors", [12, 13, 15, 16, 18]),
+               ("SW_CAMPUS_1", "queue_drops", [310, 313, 318, 318, 322]),
+               ("HOSTEL_UPLINK_01", "link_utilization_pct", [35, 38, 36, 40, 37]),
+               ("SW_CAMPUS_3", "packet_loss_pct", [0, 0, 0, 0, 0])], sig=real)
+    assert not [p for p in out if p["stance"] == "supports" and not p["hypothesis"].startswith("healthy")]
+
+
+def test_weak_rssi_without_retries_is_not_weak_wifi() -> None:
+    out = run([("HOSTEL_AP_01", "rssi_dbm", [-80, -81, -79, -82, -80]),
+               ("HOSTEL_AP_01", "retry_rate_pct", [3, 4, 2, 3, 3])])
+    assert not find(out, "weak_wifi@HOSTEL_AP_01")

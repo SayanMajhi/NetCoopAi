@@ -83,20 +83,23 @@ def test_topology_upstream_and_blast_radius() -> None:
 # --------------------------------------------------------------------------- peers change the conclusion
 
 
-def test_peer_findings_localise_to_the_shared_uplink() -> None:
-    payloads, _ = run(observations(CONGESTION), congestion_peers)
-    [up] = [p for p in payloads if p["hypothesis"] == "upstream_dependency@HOSTEL_UPLINK_01"]
-    assert up["consumed_message_ids"] == ["INC-0101-INF-01", "INC-0101-PERF-01"]
-    assert up["score"] == 0.7                          # two independent agents agree
-    assert all(d in up["reason"] for d in HOSTEL)      # blast radius is named
-    assert set(up["evidence_ids"]) >= {"EV-001", "EV-002", "EV-006"}
-    assert "healthy@HOSTEL_UPLINK_01" not in hyps(payloads)
+def test_peer_fault_gets_scope_from_own_checks_not_a_relabel() -> None:
+    """R2: one fault target -> a scope finding on the peer's own hypothesis, citing only
+    Connectivity's own checks; no upstream_dependency built from the peers' evidence."""
+    payloads, out = run(observations(CONGESTION), congestion_peers)
+    [scope] = [p for p in payloads if p["hypothesis"] == "link_congestion@HOSTEL_UPLINK_01"]
+    assert scope["stance"] == "supports"
+    assert scope["consumed_message_ids"] == ["INC-0101-INF-01", "INC-0101-PERF-01"]
+    assert all(d in scope["reason"] for d in HOSTEL)              # blast radius is named
+    peer_ids = {"EV-001", "EV-002", "EV-006"}
+    assert scope["evidence_ids"] and not set(scope["evidence_ids"]) & peer_ids
+    assert not any(h.startswith("upstream_dependency") for h in hyps(payloads))
 
 
 def test_control_run_without_peers_gives_a_different_conclusion() -> None:
     normal, _ = run(observations(CONGESTION), congestion_peers)
     control, _ = run(observations(CONGESTION))
-    assert hyps(control) == ["healthy@HOSTEL_UPLINK_01"]
+    assert hyps(control) == []                                  # R1: no campus-wide health claim
     assert all(p["consumed_message_ids"] == [] for p in control)
     assert set(hyps(normal)) != set(hyps(control))
     # the DNS view is the same either way: DNS succeeds, so it argues against dns_failure
@@ -104,13 +107,25 @@ def test_control_run_without_peers_gives_a_different_conclusion() -> None:
 
 
 def test_faults_on_two_access_switches_share_the_hostel_uplink() -> None:
+    """R2: upstream_dependency only when >= 2 distinct targets share a link that is not named."""
     obs = observations([("SW_CAMPUS_3", "interface_errors", [0, 50, 90]),
-                        ("SW_CAMPUS_4", "cpu_pct", [95, 96, 97])])
+                        ("SW_CAMPUS_4", "cpu_pct", [95, 96, 97]),
+                        ("SW_CAMPUS_3", "reachability", [True] * 3),
+                        ("SW_CAMPUS_4", "reachability", [True] * 3)])
     payloads, _ = run(obs, lambda ctx: [
         peer(ctx, "infrastructure_agent", "interface_fault@SW_CAMPUS_3", ["EV-002"]),
         peer(ctx, "infrastructure_agent", "device_overload@SW_CAMPUS_4", ["EV-005"])])
-    [up] = payloads
-    assert up["hypothesis"] == "upstream_dependency@HOSTEL_UPLINK_01" and up["score"] == 0.5   # one agent only
+    [up] = [p for p in payloads if p["hypothesis"].startswith("upstream_dependency")]
+    assert up["hypothesis"] == "upstream_dependency@HOSTEL_UPLINK_01" and up["score"] == 0.7
+    assert up["consumed_message_ids"] == ["INC-0101-INF-01", "INC-0101-INF-02"]
+    assert set(up["evidence_ids"]) == {"EV-009", "EV-012"}             # own reachability checks only
+    assert {"interface_fault@SW_CAMPUS_3", "device_overload@SW_CAMPUS_4"} <= set(hyps(payloads))
+
+
+def test_one_fault_target_never_gets_an_upstream_dependency() -> None:
+    obs = observations([("SW_CAMPUS_3", "reachability", [True] * 3)])
+    payloads, _ = run(obs, lambda ctx: [peer(ctx, "infrastructure_agent", "interface_fault@SW_CAMPUS_3", ["EV-001"])])
+    assert not any(h.startswith("upstream_dependency") for h in hyps(payloads))
 
 
 def test_faults_with_no_shared_upstream_are_independent() -> None:
@@ -119,18 +134,17 @@ def test_faults_with_no_shared_upstream_are_independent() -> None:
     payloads, _ = run(obs, lambda ctx: [
         peer(ctx, "infrastructure_agent", "interface_fault@SW_CAMPUS_3", ["EV-002"]),
         peer(ctx, "infrastructure_agent", "interface_fault@SW_CAMPUS_7", ["EV-005"])])
-    assert hyps(payloads) == ["upstream_dependency@ACC_LINK_03", "upstream_dependency@ACC_LINK_07"]
-    assert all(p["score"] == 0.4 and "independent" in p["reason"] for p in payloads)
-    assert [p["consumed_message_ids"] for p in payloads] == [["INC-0101-INF-01"], ["INC-0101-INF-02"]]
+    assert not any(h.startswith("upstream_dependency") for h in hyps(payloads))   # no shared link: no rival
 
 
 def test_contradicting_peer_still_localises_its_own_cause() -> None:
     obs = observations([("DEPT_UPLINK_01", "interface_errors", [0, 50, 90]),
-                        ("DEPT_UPLINK_01", "link_utilization_pct", [93, 95, 96])])
+                        ("DEPT_UPLINK_01", "link_utilization_pct", [93, 95, 96]),
+                        ("SW_CAMPUS_8", "reachability", [True] * 3)])
     payloads, _ = run(obs, lambda ctx: [peer(ctx, "infrastructure_agent", "interface_fault@DEPT_UPLINK_01",
                                              ["EV-002", "EV-005"], "contradicts",
                                              "link_congestion@DEPT_UPLINK_01")])
-    assert hyps(payloads) == ["upstream_dependency@DEPT_UPLINK_01"]
+    assert hyps(payloads) == ["interface_fault@DEPT_UPLINK_01"]       # its alternative, scoped
 
 
 def test_not_x_peers_localise_nothing() -> None:
@@ -152,7 +166,7 @@ def test_healthy_or_unknown_peers_localise_nothing() -> None:
         peer(ctx, "infrastructure_agent", "healthy@SW_CAMPUS_1", ["EV-001"], "contradicts",
              "interface_fault@SW_CAMPUS_1"),
         peer(ctx, "performance_agent", "link_congestion@NOT_IN_TOPOLOGY", ["EV-001"])])
-    assert hyps(payloads) == ["healthy@HOSTEL_UPLINK_01"]
+    assert hyps(payloads) == []
 
 
 def test_peer_evidence_outside_the_bundle_is_not_cited() -> None:
@@ -172,7 +186,7 @@ def test_dns_failure_on_two_clients_with_server_reachable() -> None:
                         ("SW_CAMPUS_8", "dns_success", [False, False, False]),
                         ("SRV_DNS_DHCP_01", "reachability", [True, True, True])])
     payloads, _ = run(obs)
-    [dns] = payloads
+    [dns] = [p for p in payloads if p["stance"] == "supports"]
     assert dns["hypothesis"] == "dns_failure@SRV_DNS_DHCP_01" and dns["score"] == 0.8
     assert dns["evidence_ids"] == ["EV-003", "EV-006", "EV-009"]
 
@@ -184,7 +198,7 @@ def test_dns_failure_with_unreachable_server_points_at_the_path() -> None:
     [p] = [p for p in payloads if p["stance"] == "contradicts"]
     assert p["target_hypothesis"] == "dns_failure@SRV_DNS_DHCP_01"
     assert p["hypothesis"] == "upstream_dependency@SRV_LINK_01"
-    assert hyps(payloads) == ["upstream_dependency@SRV_LINK_01"]       # the reachability check agrees
+    assert hyps(payloads) == []          # one unreachable device is not a shared-upstream story (R2)
 
 
 def test_dhcp_failure_on_one_client_with_unknown_server_is_weaker() -> None:
@@ -205,7 +219,7 @@ def test_unreachable_distribution_switch_blames_its_uplink() -> None:
     obs = observations([("SW_CAMPUS_1", "reachability", [False] * 3), ("SW_CAMPUS_3", "reachability", [False] * 3)])
     payloads, _ = run(obs)
     [up] = payloads
-    assert up["hypothesis"] == "upstream_dependency@HOSTEL_UPLINK_01" and up["score"] == 0.8
+    assert up["hypothesis"] == "upstream_dependency@HOSTEL_UPLINK_01" and up["score"] == 0.7
 
 
 def test_missing_and_stale_checks_are_unknown_not_failures() -> None:
@@ -250,6 +264,47 @@ def test_pipeline_with_real_infrastructure_and_connectivity() -> None:
         return [m.payload for m in result.findings if m.sender == "connectivity_agent"]
 
     normal, control = conn(False), conn(True)
-    assert "upstream_dependency@HOSTEL_UPLINK_01" in hyps(normal)
+    assert "link_congestion@HOSTEL_UPLINK_01" in hyps(normal)              # scope of the Infrastructure finding
     assert any(p["consumed_message_ids"] for p in normal)
-    assert hyps(control) == ["healthy@HOSTEL_UPLINK_01"]
+    assert hyps(control) == []
+
+
+# --------------------------------------------------------------------------- Phase 2 review (R1, R2)
+
+
+def test_no_campus_wide_health_claim_even_when_everything_answers() -> None:
+    """R1: health only for paths it measured, as contradicts; never `healthy@<root>` supports."""
+    obs = observations([(d, "reachability", [True] * 3) for d in ("SW_CAMPUS_3", "SW_CAMPUS_4", "SRV_DNS_DHCP_01")])
+    payloads, _ = run(obs)
+    assert hyps(payloads) == []
+    claims = {p["hypothesis"]: p for p in payloads}
+    assert set(claims) == {"healthy@ACC_LINK_04", "healthy@SRV_LINK_01"}    # ACC_LINK_03 also feeds an unchecked AP
+    assert all(p["stance"] == "contradicts" and p["target_hypothesis"].startswith("upstream_dependency@")
+               for p in payloads)
+
+
+def test_no_path_health_claim_when_any_observation_is_missing_or_stale() -> None:
+    obs = observations([("SW_CAMPUS_4", "reachability", [True] * 3), ("HOSTEL_UPLINK_01", "link_utilization_pct", [None, 50, 51])],
+                       flags={("link_utilization_pct", 0): ["missing"]})
+    payloads, _ = run(obs)
+    assert not any(p["hypothesis"].startswith("healthy@") for p in payloads)
+
+
+def test_weak_wifi_checks_the_ap_uplink_instead_of_blaming_it() -> None:
+    """R2: weak Wi-Fi needs a healthy uplink; Connectivity checks it with its own path evidence."""
+    obs = observations([("HOSTEL_AP_01", "rssi_dbm", [-80, -81, -79]),
+                        ("HOSTEL_AP_LINK_01", "packet_loss_pct", [0, 0, 0.1]),
+                        ("SW_CAMPUS_3", "reachability", [True] * 3)])
+    payloads, _ = run(obs, lambda ctx: [peer(ctx, "infrastructure_agent", "weak_wifi@HOSTEL_AP_01", ["EV-001", "EV-002"])])
+    assert not any(h.startswith("upstream_dependency") for h in hyps(payloads))
+    [uplink] = [p for p in payloads if p["hypothesis"] == "healthy@HOSTEL_AP_LINK_01"]
+    assert uplink["stance"] == "contradicts" and uplink["target_hypothesis"] == "upstream_dependency@HOSTEL_AP_LINK_01"
+    assert uplink["consumed_message_ids"] == ["INC-0101-INF-01"]
+    assert not set(uplink["evidence_ids"]) & {"EV-001", "EV-002", "EV-003"}  # never the RSSI evidence
+
+
+def test_lossy_ap_uplink_is_an_upstream_problem() -> None:
+    obs = observations([("HOSTEL_AP_01", "rssi_dbm", [-80, -81, -79]),
+                        ("HOSTEL_AP_LINK_01", "packet_loss_pct", [4, 6, 5])])
+    payloads, _ = run(obs, lambda ctx: [peer(ctx, "infrastructure_agent", "weak_wifi@HOSTEL_AP_01", ["EV-001"])])
+    assert hyps(payloads) == ["upstream_dependency@HOSTEL_AP_LINK_01"]

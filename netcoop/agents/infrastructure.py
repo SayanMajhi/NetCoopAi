@@ -105,10 +105,11 @@ def peak_delta(observations: list[Observation]) -> float:
     return max((d for d, _ in deltas), default=0.0)
 
 
-def is_rising(growth: float, threshold: dict[str, Any]) -> bool:
-    """rising_delta: positive growth, at least `warn` when a warn threshold is set."""
+def is_rising(peak: float, threshold: dict[str, Any]) -> bool:
+    """rising_delta: the largest single-interval growth reaches `warn` (thresholds are per
+    interval, so slow background ticking on a healthy port never adds up to a fault)."""
     warn = threshold.get("warn")
-    return growth > 0 and (warn is None or growth >= warn)
+    return peak > 0 and (warn is None or peak >= warn)
 
 
 def is_down(o: Observation) -> bool:
@@ -160,8 +161,8 @@ class InfrastructureAgent(BaseAgent):
     def _interface(self, msg: Envelope, ctx: IncidentContext, target: str) -> list[Envelope]:
         err_growth, err_ids, err_resets = counter_growth(ctx.for_target(target, "interface_errors"))
         flap_growth, flap_ids, _ = counter_growth(ctx.for_target(target, "link_flap_count"))
-        errors_up = is_rising(err_growth, ctx.threshold("interface_errors"))
-        flaps_up = is_rising(flap_growth, ctx.threshold("link_flap_count"))
+        errors_up = is_rising(peak_delta(ctx.for_target(target, "interface_errors")), ctx.threshold("interface_errors"))
+        flaps_up = is_rising(peak_delta(ctx.for_target(target, "link_flap_count")), ctx.threshold("link_flap_count"))
         status = usable(ctx.for_target(target, "interface_oper_status"))
         down = status[-1] if status and is_down(status[-1]) else None
 
@@ -173,17 +174,21 @@ class InfrastructureAgent(BaseAgent):
                 evidence_ids=[down.evidence_id, *corroboration], score=0.8 if corroboration else 0.5,
                 reason=f"interface_oper_status is '{down.value}'"
                        + (" with rising error/flap counters" if corroboration else "; no corroborating counters")))
-        elif errors_up or flaps_up:
-            cited = (err_ids if errors_up else []) + (flap_ids if flaps_up else [])
+        elif (errors_up or flaps_up) and (loss := downstream_loss(ctx, target)):
+            # interface_fault signature: error/flap growth AND packet loss downstream of the target.
+            # Errors alone are background noise on copper and prove nothing.
+            loss_value, loss_ids = loss
+            cited = (err_ids if errors_up else []) + (flap_ids if flaps_up else []) + loss_ids
             critical = ctx.threshold("interface_errors").get("critical")
             severe = errors_up and critical is not None and \
                 peak_delta(ctx.for_target(target, "interface_errors")) >= critical
             score = 0.8 if severe or flaps_up else 0.6
             parts = ([f"interface_errors rose by {err_growth:g} in the window"] if errors_up else []) + \
-                    ([f"link_flap_count rose by {flap_growth:g}"] if flaps_up else [])
+                    ([f"link_flap_count rose by {flap_growth:g}"] if flaps_up else []) + \
+                    [f"downstream packet loss p95 {loss_value:g}% above warning"]
             out.append(self._emit(msg, ctx, hypothesis=f"interface_fault@{target}", stance=Stance.supports,
                                   evidence_ids=cited, score=score, reason="; ".join(parts)))
-            out += self._contradict_congestion(msg, ctx, target, cited)
+            out += self._contradict_congestion(msg, ctx, target, err_ids + flap_ids)
         elif err_resets:
             out.append(self._emit(
                 msg, ctx, hypothesis=f"healthy@{target}", stance=Stance.contradicts,
@@ -220,7 +225,7 @@ class InfrastructureAgent(BaseAgent):
     def _queue_drops(self, msg: Envelope, ctx: IncidentContext, target: str) -> list[Envelope]:
         """Rising drops plus high utilization on an adjacent link corroborate congestion there."""
         growth, ids, _ = counter_growth(ctx.for_target(target, "queue_drops"))
-        if not is_rising(growth, ctx.threshold("queue_drops")):
+        if not is_rising(peak_delta(ctx.for_target(target, "queue_drops")), ctx.threshold("queue_drops")):
             return []
         threshold = ctx.threshold("link_utilization_pct")
         best: Optional[tuple[float, str, list[str]]] = None
@@ -262,10 +267,7 @@ class InfrastructureAgent(BaseAgent):
             return [self._emit(msg, ctx, hypothesis=f"weak_wifi@{target}", stance=Stance.supports,
                                evidence_ids=rssi_ids + retry_ids, score=score,
                                reason=f"median RSSI {signal:g} dBm{note} with high retry rate")]
-        if band == "weak":
-            return [self._emit(msg, ctx, hypothesis=f"weak_wifi@{target}", stance=Stance.supports,
-                               evidence_ids=rssi_ids + retry_ids, score=0.4,
-                               reason=f"median RSSI {signal:g} dBm is weak but retries do not corroborate")]
+        # weak RSSI without high retries: the weak_wifi signature needs both, so no supports
         if band == "strong" and retry_state in ("normal", "unknown"):
             return [self._emit(msg, ctx, hypothesis=f"healthy@{target}", stance=Stance.contradicts,
                                target_hypothesis=f"weak_wifi@{target}", evidence_ids=rssi_ids + retry_ids,
@@ -273,6 +275,36 @@ class InfrastructureAgent(BaseAgent):
                                reason=f"median RSSI {signal:g} dBm is strong"
                                       + (" and retries are normal" if retry_state == "normal" else ""))]
         return []  # grey zone without retry evidence: uncertain, say nothing
+
+
+def downstream(topology: dict[str, Any], target: str) -> set[str]:
+    """The target plus every device behind it (a link's far end and its descendants)."""
+    links = [link for link in topology.get("links") or [] if isinstance(link, dict)]
+    edge = next((link for link in links if link.get("link_id") == target), None)
+    out: set[str] = {target} if edge else set()
+    stack = [edge["b"]] if edge else [target]
+    while stack:
+        node = stack.pop()
+        if node not in out:
+            out.add(node)
+            stack.extend(link["b"] for link in links if link.get("a") == node)
+    return out
+
+
+def downstream_loss(ctx: IncidentContext, target: str) -> Optional[tuple[float, list[str]]]:
+    """(p95 packet loss, IDs of samples above warn) downstream of the target, or None
+    when there is no loss evidence or it stays at or below warn."""
+    warn = ctx.threshold("packet_loss_pct").get("warn")
+    if warn is None:
+        return None
+    samples = sorted(((v, o.evidence_id) for t in downstream(ctx.topology, target)
+                      for o, v in numeric_samples(ctx.for_target(t, "packet_loss_pct"))))
+    if not samples:
+        return None
+    p95 = samples[-(-95 * len(samples) // 100) - 1][0]
+    if p95 <= warn:
+        return None
+    return p95, sorted(eid for v, eid in samples if v > warn)
 
 
 def related_links(topology: dict[str, Any], target: str) -> list[str]:

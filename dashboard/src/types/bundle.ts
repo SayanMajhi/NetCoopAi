@@ -13,7 +13,13 @@ export type MessageId = string;
  * Protocol and version
  */
 export type Protocol = string;
+/**
+ * Agent ID of the recipient
+ */
 export type Recipient = string;
+/**
+ * Agent ID of the sender, as on its agent card
+ */
 export type Sender = string;
 /**
  * RFC 3339 date-time with timezone, UTC preferred

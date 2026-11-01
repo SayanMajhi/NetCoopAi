@@ -36,9 +36,15 @@ def message(base: dict, **overrides) -> dict:
     return msg
 
 
+# Connectivity's own check inside the hostel uplink's blast radius (its scope evidence).
+REACHABLE = {**OBSERVATION, "evidence_id": "EV-015", "source_id": "client-probe", "link_id": None,
+             "device_id": "SW_CAMPUS_3", "metric": "reachability", "value": True, "unit": "boolean",
+             "original_field": "metrics.reachability", "original_value": True}
+
+
 def bundle(*messages: dict, **overrides) -> dict:
     body = {"messages": list(messages) or [message(TASK), message(FINDING)],
-            "observations": [copy.deepcopy(OBSERVATION)], "topology": TOPOLOGY}
+            "observations": [copy.deepcopy(OBSERVATION), copy.deepcopy(REACHABLE)], "topology": TOPOLOGY}
     body.update(overrides)
     return body
 
@@ -78,8 +84,9 @@ def test_valid_bundle_gets_the_connectivity_analysis(client):
     assert reply["in_reply_to"] == "INC-0001-ORCH-03" and reply["recipient"] == "correlation_agent"
     assert reply["message_id"] == "INC-0001-CONN-01"
     assert reply["timestamp"] == TASK["timestamp"]           # incident clock, not wall clock
-    assert reply["payload"]["hypothesis"] == "upstream_dependency@HOSTEL_UPLINK_01"
+    assert reply["payload"]["hypothesis"] == "link_congestion@HOSTEL_UPLINK_01"     # scope, not a relabel (R2)
     assert reply["payload"]["consumed_message_ids"] == ["INC-0001-INF-02"]
+    assert reply["payload"]["evidence_ids"] == ["EV-015"]                            # its own check, not EV-014
 
 
 def test_not_x_peer_localises_nothing(client):
@@ -219,3 +226,51 @@ def test_analysis_crash_is_typed_agent_failure(client, monkeypatch):
     monkeypatch.setattr("connectivity_service.app.handle_bundle", boom)
     error = assert_error(client.post("/messages", json=bundle()), 500, "AGENT_FAILURE", None)
     assert error["in_reply_to"] == "INC-0001-ORCH-03"
+
+
+# --------------------------------------------------------------------------- Phase 2 review (R3)
+
+
+def test_trailing_newline_peer_is_rejected_as_input_not_agent_failure(client):
+    """Python's jsonschema lets `$` match before a final newline; the typed models do not."""
+    peer = message(FINDING)
+    peer["payload"]["hypothesis"] = "link_congestion@HOSTEL_UPLINK_01\n"
+    resp = client.post("/messages", json=bundle(message(TASK), peer))
+    assert resp.status_code != 500
+    error = [m for m in reply_messages(resp, 200) if m["type"] == "ERROR"]
+    assert error and error[0]["payload"]["code"] == "INVALID_VALUE"
+    assert error[0]["payload"]["field_path"] == "messages.1.payload.hypothesis"
+    rows = client.get("/events").json()
+    assert [r["valid"] for r in rows if r["message_id"] == "INC-0001-INF-02"] == [0]
+
+
+def test_trailing_newline_in_the_task_is_a_400(client):
+    task = message(TASK, protocol="netcoop/1.0\n")    # passes jsonschema and the version regex, not the model
+    resp = client.post("/messages", json=bundle(task))
+    assert resp.status_code == 400
+    assert resp.json()["messages"][0]["payload"]["code"] == "INVALID_VALUE"
+
+
+def test_peer_citing_unknown_evidence_gets_unknown_evidence(client):
+    peer = message(FINDING)
+    peer["payload"]["evidence_ids"] = ["EV-014", "EV-999"]
+    messages = reply_messages(client.post("/messages", json=bundle(message(TASK), peer)), 200)
+    [error] = [m for m in messages if m["type"] == "ERROR"]
+    assert error["payload"]["code"] == "UNKNOWN_EVIDENCE"
+    assert error["payload"]["field_path"] == "messages.1.payload.evidence_ids"
+    assert "EV-999" in error["payload"]["detail"]
+    assert not any(m["type"] == "FINDING" and m["payload"]["consumed_message_ids"] for m in messages)
+
+
+def test_good_peer_still_used_when_another_cites_unknown_evidence(client):
+    bad = message(FINDING, message_id="INC-0001-INF-03")
+    bad["payload"]["evidence_ids"] = ["EV-999"]
+    messages = reply_messages(client.post("/messages", json=bundle(message(TASK), message(FINDING), bad)), 200)
+    assert any(m["type"] == "FINDING" and m["payload"]["consumed_message_ids"] == ["INC-0001-INF-02"] for m in messages)
+    assert [m["payload"]["code"] for m in messages if m["type"] == "ERROR"] == ["UNKNOWN_EVIDENCE"]
+
+
+def test_empty_sender_is_rejected(client):
+    peer = message(FINDING, sender="")
+    messages = reply_messages(client.post("/messages", json=bundle(message(TASK), peer)), 200)
+    assert [m["payload"]["field_path"] for m in messages if m["type"] == "ERROR"] == ["messages.1.sender"]

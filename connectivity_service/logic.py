@@ -6,14 +6,30 @@ faults they name to the deepest link they all depend on, and lists those peers i
 `consumed_message_ids`. Without peers it can only judge its own service and path
 checks, so the same evidence gives a different conclusion (the --control run).
 
+What it may claim (Phase 2 review, R1/R2):
+- Only from its OWN evidence (reachability / DNS / DHCP checks, and link loss for an
+  AP uplink). It never re-cites a peer's evidence IDs; peers are referenced through
+  `consumed_message_ids`.
+- Scope: for a fault a peer names, it adds the blast radius and how its own checks in
+  that radius look (a supports finding on the peer's hypothesis).
+- `upstream_dependency@L` only when >= 2 distinct fault targets share link L and L is
+  not itself one of them (a genuinely different explanation).
+- Health only for what it measured: `healthy@<link> contradicts upstream_dependency@<link>`
+  when every device behind the link answered, and never when any observation in the
+  Bundle is missing or stale. It never claims a whole campus or zone is healthy.
+
 The topology is a tree: every link runs from `a` (upstream, towards the core) to
 `b` (downstream). Missing, stale or malformed checks are unknown, never a pass or
-a fail. No thresholds are needed: the checks it owns are booleans.
+a fail. The only threshold it reads is packet_loss_pct `warn`, for AP uplinks.
 """
 from __future__ import annotations
 
 from collections import defaultdict
+from functools import lru_cache
+from pathlib import Path
 from typing import Any, Iterable, Optional
+
+import yaml
 
 from netcoop.agents.base import BaseAgent, IncidentContext
 from netcoop.protocol.models import (
@@ -31,6 +47,16 @@ UNUSABLE = {QualityFlag.missing.value, QualityFlag.stale.value, QualityFlag.malf
 TRUE_VALUES = {"true", "1", "1.0", "yes", "ok", "up", "success"}
 FALSE_VALUES = {"false", "0", "0.0", "no", "fail", "failed", "down", "timeout"}
 SERVICES = (("dns_success", "dns", "dns_failure"), ("dhcp_success", "dhcp", "dhcp_failure"))
+OWN_CHECKS = ("reachability", "dns_success", "dhcp_success")
+INCOMPLETE = {QualityFlag.missing.value, QualityFlag.stale.value, QualityFlag.out_of_window.value}
+SIGNATURES = Path(__file__).resolve().parents[1] / "netcoop" / "config" / "signatures-1.0.yaml"
+
+
+@lru_cache(maxsize=1)
+def loss_warn() -> Optional[float]:
+    """packet_loss_pct warn from the versioned signatures config (thresholds live only there)."""
+    config = yaml.safe_load(SIGNATURES.read_text(encoding="utf-8"))
+    return (config.get("thresholds") or {}).get("packet_loss_pct", {}).get("warn")
 
 
 # --------------------------------------------------------------------------- topology
@@ -71,6 +97,19 @@ class Topology:
         """Blast radius: every device downstream of the link."""
         out: list[str] = []
         stack = [self.links[link]["b"]]
+        while stack:
+            node = stack.pop()
+            if node not in out:
+                out.append(node)
+                stack.extend(self.children.get(node, []))
+        return sorted(out)
+
+    def radius(self, target: str) -> list[str]:
+        """Devices affected by a fault on `target`: behind a link, or a device and its descendants."""
+        if target in self.links:
+            return self.behind(target)
+        out: list[str] = []
+        stack = [target]
         while stack:
             node = stack.pop()
             if node not in out:
@@ -127,22 +166,30 @@ class ConnectivityAgent(BaseAgent):
                               topology=topology, signatures={})
         topo = Topology(topology)
         reach = latest_checks(ctx, "reachability")
+        faults = self._peer_faults(topo, peers)
+        notes: list[str] = []
 
         out = self._services(ctx, task, topo, reach)
-        out += self._reachability(ctx, task, topo, reach)
-        out += self._peers(ctx, task, topo, reach, peers)
-        if not any(m.payload["stance"] == Stance.supports.value and cause_of(m.payload["hypothesis"]) != "healthy"
-                   for m in out) and not self._peer_faults(topo, peers):
-            out += self._healthy(ctx, task, topo)
-        if not out:
-            answer = (f"no DNS/DHCP/reachability checks and {len(peers)} usable peer finding(s); "
-                      "connectivity cannot judge this incident")
+        out += self._shared_upstream(ctx, task, topo, reach, faults)
+        out += self._scope(ctx, task, topo, faults, notes)
+        out += self._wifi_uplinks(ctx, task, topo, reach, faults, notes)
+        out += self._path_health(ctx, task, topo, reach, faults, {m.payload["hypothesis"] for m in out})
+        if notes or not out:
+            answer = "; ".join(notes) if notes else (
+                f"no DNS/DHCP/reachability checks and {len(peers)} usable peer finding(s); "
+                "connectivity cannot judge this incident")
             out.append(self.make(ctx, task.sender, MessageType.RESPONSE,
                                  ResponsePayload(answer=answer).model_dump(mode="json"), task.message_id))
         return out
 
     def _emit(self, ctx: IncidentContext, task: Envelope, **kw: Any) -> Envelope:
         return self.finding(ctx, RECIPIENT, task.message_id, **kw)
+
+    @staticmethod
+    def _own(ctx: IncidentContext, devices: Iterable[str]) -> list[Observation]:
+        """Connectivity's own usable checks (latest per device and check) on these devices."""
+        wanted = set(devices)
+        return [o for metric in OWN_CHECKS for d, o in sorted(latest_checks(ctx, metric).items()) if d in wanted]
 
     # ----------------------------------------------------------------- DNS / DHCP
 
@@ -184,30 +231,6 @@ class ConnectivityAgent(BaseAgent):
                     reason=f"{metric} succeeds on every checked client ({', '.join(passing)})"))
         return out
 
-    # ----------------------------------------------------------------- reachability
-
-    def _reachability(self, ctx: IncidentContext, task: Envelope, topo: Topology,
-                      reach: dict[str, Observation]) -> list[Envelope]:
-        down = sorted(d for d, o in reach.items() if as_bool(o) is False and topo.knows(d))
-        if not down:
-            return []
-        link = topo.common_upstream(down)
-        if link is None:
-            return []
-        radius = topo.behind(link)
-        ids = [reach[d].evidence_id for d in down]
-        where, why = link, f"all behind {link}"
-        head = topo.links[link]["b"]
-        if head not in down and head in reach and as_bool(reach[head]) is True:
-            # the device just below the shared link still answers, so the fault is that device
-            where, why = head, f"all behind {head}, which itself is reachable"
-            ids.append(reach[head].evidence_id)
-        return [self._emit(
-            ctx, task, hypothesis=f"upstream_dependency@{where}", stance=Stance.supports,
-            evidence_ids=ids, score=0.8 if len(down) >= 2 else 0.5,
-            reason=f"{len(down)} device(s) unreachable ({', '.join(down)}), {why}; "
-                   f"blast radius {len(radius)} device(s): {', '.join(radius)}")]
-
     # ----------------------------------------------------------------- peer findings
 
     @staticmethod
@@ -225,63 +248,128 @@ class ConnectivityAgent(BaseAgent):
                 out.append((peer, target))
         return out
 
-    def _peers(self, ctx: IncidentContext, task: Envelope, topo: Topology,
-               reach: dict[str, Observation], peers: list[Envelope]) -> list[Envelope]:
-        faults = self._peer_faults(topo, peers)
-        if not faults:
+    def _shared_upstream(self, ctx: IncidentContext, task: Envelope, topo: Topology,
+                         reach: dict[str, Observation], faults: list[tuple[Envelope, str]]) -> list[Envelope]:
+        """>= 2 distinct fault targets (peer-named or unreachable devices) behind one link that
+        is not itself named: that shared link is a genuinely different explanation."""
+        down = sorted(d for d, o in reach.items() if as_bool(o) is False and topo.knows(d))
+        targets = sorted({t for _, t in faults} | set(down))
+        if len(targets) < 2:
             return []
-        shared = topo.common_upstream(t for _, t in faults)
-        groups: dict[str, list[tuple[Envelope, str]]] = defaultdict(list)
-        for peer, target in faults:     # no shared link: each fault on its own nearest link
-            chain = topo.upstream(target)
-            if shared or chain:
-                groups[shared or chain[0]].append((peer, target))
+        link = topo.common_upstream(targets)
+        if link is None or link in targets:
+            return []
+        where, head = link, topo.links[link]["b"]
+        if head not in targets and head in reach and as_bool(reach[head]) is True:
+            where = head          # the device just below the shared link still answers: it is the suspect
+        radius = topo.behind(link)
+        own = self._own(ctx, radius)
+        if not own:
+            return []
+        consumed = sorted({p.message_id for p, t in faults if t in targets})
+        return [self._emit(
+            ctx, task, hypothesis=f"upstream_dependency@{where}", stance=Stance.supports,
+            evidence_ids=[o.evidence_id for o in own], score=0.7, consumed_message_ids=consumed,
+            reason=f"{len(targets)} distinct fault targets ({', '.join(targets)}) all sit behind {link}"
+                   + (f"; {head} just below it still answers" if where == head else "")
+                   + f"; blast radius {len(radius)} device(s): {', '.join(radius)}; "
+                     f"{sum(1 for d in down if d in radius)} unreachable in own checks")]
+
+    def _scope(self, ctx: IncidentContext, task: Envelope, topo: Topology,
+               faults: list[tuple[Envelope, str]], notes: list[str]) -> list[Envelope]:
+        """For each fault a peer names: its blast radius, judged with Connectivity's own checks only."""
+        groups: dict[str, list[Envelope]] = defaultdict(list)
+        for peer, _ in faults:
+            groups[peer.payload["hypothesis"]].append(peer)
         out: list[Envelope] = []
-        for link in sorted(groups):
-            out += self._localise(ctx, task, topo, reach, link, groups[link], shared=shared is not None)
+        for hypothesis in sorted(groups):
+            if cause_of(hypothesis) == "weak_wifi":
+                continue                                    # judged through its AP uplink instead
+            radius = topo.radius(target_of(hypothesis))
+            own = self._own(ctx, radius)
+            if not own:
+                notes.append(f"no own checks in the blast radius of {hypothesis} ({', '.join(radius)}); "
+                             "scope not judged")
+                continue
+            up = sorted({o.device_id for o in own if o.metric == "reachability" and as_bool(o) is True})
+            failing = sorted({o.device_id for o in own if as_bool(o) is False})
+            senders = ", ".join(sorted({p.sender for p in groups[hypothesis]}))
+            state = ("all checked devices answer: a degradation, not an outage" if not failing
+                     else f"own checks fail on {', '.join(failing)}")
+            out.append(self._emit(
+                ctx, task, hypothesis=hypothesis, stance=Stance.supports,
+                evidence_ids=[o.evidence_id for o in own], score=0.5,
+                consumed_message_ids=sorted(p.message_id for p in groups[hypothesis]),
+                reason=f"scope of {hypothesis} (named by {senders}): blast radius {len(radius)} device(s): "
+                       f"{', '.join(radius)}; reachable: {', '.join(up) or 'none checked'}; {state}"))
         return out
 
-    def _localise(self, ctx: IncidentContext, task: Envelope, topo: Topology, reach: dict[str, Observation],
-                  link: str, group: list[tuple[Envelope, str]], shared: bool) -> list[Envelope]:
-        radius = topo.behind(link)
-        peer_ids = [e for p, _ in group for e in p.payload.get("evidence_ids", []) if ctx.evidence(e)]
-        own_ids = [o.evidence_id for d, o in reach.items() if d in radius]
-        if not peer_ids + own_ids:
-            return []
-        senders = sorted({p.sender for p, _ in group})
-        outside = sorted(d for d, o in reach.items() if as_bool(o) is False and d not in radius)
-        named = ", ".join(sorted({f"{p.payload['hypothesis']} ({p.sender})" for p, _ in group}))
-        score = (0.7 if len(senders) >= 2 else 0.5) if shared else 0.4
-        reason = (f"peer findings {named} all depend on {link}; blast radius {len(radius)} device(s): "
-                  f"{', '.join(radius)}") if shared else \
-                 (f"peer findings {named} sit behind {link}; the peers name faults with no shared upstream, "
-                  "so they look independent")
-        if outside:
-            score = min(score, 0.3)
-            reason += f"; but {', '.join(outside)} outside that radius are unreachable too"
-        return [self._emit(ctx, task, hypothesis=f"upstream_dependency@{link}", stance=Stance.supports,
-                           evidence_ids=peer_ids + own_ids, score=score, reason=reason,
-                           consumed_message_ids=sorted(p.message_id for p, _ in group))]
+    def _wifi_uplinks(self, ctx: IncidentContext, task: Envelope, topo: Topology,
+                      reach: dict[str, Observation], faults: list[tuple[Envelope, str]],
+                      notes: list[str]) -> list[Envelope]:
+        """weak_wifi needs a healthy AP uplink: check it with own path evidence, never from RSSI."""
+        aps: dict[str, list[Envelope]] = defaultdict(list)
+        for peer, target in faults:
+            if cause_of(peer.payload["hypothesis"]) == "weak_wifi":
+                aps[target].append(peer)
+        warn = loss_warn()
+        out: list[Envelope] = []
+        for ap in sorted(aps):
+            link = topo.parent_link.get(ap)
+            if link is None:
+                continue
+            switch = topo.links[link]["a"]
+            loss = [o for o in ctx.for_target(link, "packet_loss_pct")
+                    if o.value is not None and not UNUSABLE.intersection(o.quality_flags)]
+            checks = [reach[d] for d in (switch, ap) if d in reach]
+            if warn is None or not (loss or checks):
+                notes.append(f"no own evidence on {link} to check the uplink of {ap}")
+                continue
+            lossy = [o for o in loss if float(o.value) > warn]
+            down = [o for o in checks if as_bool(o) is False]
+            ids = [o.evidence_id for o in loss + checks]
+            consumed = sorted(p.message_id for p in aps[ap])
+            if lossy or down:
+                problems = ([f"loss above {warn:g}% in {len(lossy)} sample(s)"] if lossy else []) + \
+                           ([f"{', '.join(o.device_id or '' for o in down)} unreachable"] if down else [])
+                out.append(self._emit(
+                    ctx, task, hypothesis=f"upstream_dependency@{link}", stance=Stance.supports,
+                    evidence_ids=ids, score=0.6, consumed_message_ids=consumed,
+                    reason=f"uplink {link} of {ap} is not healthy: {', '.join(problems)}"))
+            else:
+                out.append(self._emit(
+                    ctx, task, hypothesis=f"healthy@{link}", stance=Stance.contradicts,
+                    target_hypothesis=f"upstream_dependency@{link}", evidence_ids=ids, score=0.7,
+                    consumed_message_ids=consumed,
+                    reason=f"uplink {link} of {ap} is healthy ({len(loss)} loss sample(s) at or below {warn:g}%"
+                           + (f", {switch} reachable" if switch in reach else "")
+                           + "): the weak Wi-Fi is local to the radio, as its signature requires"))
+        return out
 
-    # ----------------------------------------------------------------- healthy
+    # ----------------------------------------------------------------- path health
 
-    def _healthy(self, ctx: IncidentContext, task: Envelope, topo: Topology) -> list[Envelope]:
-        """Every own check passes and nothing localises a fault."""
-        checks = [o for metric in ("reachability", "dns_success", "dhcp_success")
-                  for o in latest_checks(ctx, metric).values()]
-        if not checks or any(as_bool(o) is False for o in checks):
+    def _path_health(self, ctx: IncidentContext, task: Envelope, topo: Topology, reach: dict[str, Observation],
+                     faults: list[tuple[Envelope, str]], already: set[str]) -> list[Envelope]:
+        """`healthy@L contradicts upstream_dependency@L` for each link whose every downstream
+        device answered. A statement about paths, never about the campus; none at all when
+        any observation in the Bundle is missing or stale."""
+        if any(INCOMPLETE.intersection(o.quality_flags) for o in ctx.observations):
             return []
-        scope = [t for t in task.payload.get("scope_ids", []) if topo.knows(t)]
-        where = topo.common_upstream(scope) if scope else None
-        root = next((n for n in sorted(topo.nodes) if n not in topo.parent_link and topo.children.get(n)), None)
-        where = where or root
-        if where is None:
-            return []
-        return [self._emit(
-            ctx, task, hypothesis=f"healthy@{where}", stance=Stance.supports,
-            evidence_ids=[o.evidence_id for o in checks], score=0.5,
-            reason=f"all {len(checks)} reachability/DNS/DHCP check(s) pass and no peer finding localises "
-                   f"a fault in scope (common upstream {where})")]
+        fault_targets = {t for _, t in faults}
+        out: list[Envelope] = []
+        for link in sorted(topo.links):
+            radius = topo.behind(link)
+            if f"healthy@{link}" in already or fault_targets & ({link} | set(radius)):
+                continue
+            checks = [reach.get(d) for d in radius]
+            if not radius or any(o is None or as_bool(o) is not True for o in checks):
+                continue
+            out.append(self._emit(
+                ctx, task, hypothesis=f"healthy@{link}", stance=Stance.contradicts,
+                target_hypothesis=f"upstream_dependency@{link}",
+                evidence_ids=[o.evidence_id for o in checks if o is not None], score=0.6,
+                reason=f"every device behind {link} ({', '.join(radius)}) answered its reachability check"))
+        return out
 
 
 def handle_bundle(messages: list[Envelope], observations: list[Observation],

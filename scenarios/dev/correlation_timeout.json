@@ -8,8 +8,8 @@
    "device_id": "HOSTEL_AP_01",
    "source_id": "wlc-telemetry",
    "metrics": {
-    "retry_rate_pct": 6.0,
-    "rssi_dbm": -56.0
+    "retry_rate_pct": 3.5,
+    "rssi_dbm": -59.0
    }
   },
   {
@@ -17,7 +17,7 @@
    "device_id": "HOSTEL_AP_01",
    "source_id": "wlc-telemetry",
    "metrics": {
-    "retry_rate_pct": 3.8,
+    "retry_rate_pct": 3.7,
     "rssi_dbm": -58.0
    }
   },
@@ -26,8 +26,8 @@
    "device_id": "HOSTEL_AP_01",
    "source_id": "wlc-telemetry",
    "metrics": {
-    "retry_rate_pct": 4.5,
-    "rssi_dbm": -60.0
+    "retry_rate_pct": 5.6,
+    "rssi_dbm": -57.0
    }
   },
   {
@@ -35,8 +35,8 @@
    "device_id": "HOSTEL_AP_01",
    "source_id": "wlc-telemetry",
    "metrics": {
-    "retry_rate_pct": 3.1,
-    "rssi_dbm": -58.0
+    "retry_rate_pct": 4.5,
+    "rssi_dbm": -56.0
    }
   },
   {
@@ -44,8 +44,8 @@
    "device_id": "HOSTEL_AP_01",
    "source_id": "wlc-telemetry",
    "metrics": {
-    "retry_rate_pct": 5.6,
-    "rssi_dbm": -59.0
+    "retry_rate_pct": 5.2,
+    "rssi_dbm": -54.0
    }
   },
   {
@@ -93,8 +93,8 @@
    "device_id": "SW_CAMPUS_1",
    "source_id": "switch-telemetry",
    "metrics": {
-    "cpu_utilization_pct": 27.3,
-    "memory_pct": 49.1,
+    "cpu_utilization_pct": 33.3,
+    "memory_pct": 41.3,
     "queue_drops": 1040
    }
   },
@@ -103,8 +103,8 @@
    "device_id": "SW_CAMPUS_1",
    "source_id": "switch-telemetry",
    "metrics": {
-    "cpu_utilization_pct": 31.8,
-    "memory_pct": 43.9,
+    "cpu_utilization_pct": 26.3,
+    "memory_pct": 44.8,
     "queue_drops": 1480
    }
   },
@@ -113,8 +113,8 @@
    "device_id": "SW_CAMPUS_1",
    "source_id": "switch-telemetry",
    "metrics": {
-    "cpu_utilization_pct": 27.2,
-    "memory_pct": 40.7,
+    "cpu_utilization_pct": 25.9,
+    "memory_pct": 42.0,
     "queue_drops": 2010
    }
   },
@@ -123,8 +123,8 @@
    "device_id": "SW_CAMPUS_1",
    "source_id": "switch-telemetry",
    "metrics": {
-    "cpu_utilization_pct": 25.2,
-    "memory_pct": 46.7,
+    "cpu_utilization_pct": 33.4,
+    "memory_pct": 46.5,
     "queue_drops": 2620
    }
   },
@@ -133,18 +133,58 @@
    "device_id": "SW_CAMPUS_1",
    "source_id": "switch-telemetry",
    "metrics": {
-    "cpu_utilization_pct": 23.0,
-    "memory_pct": 46.2,
+    "cpu_utilization_pct": 30.9,
+    "memory_pct": 41.8,
     "queue_drops": 3190
    }
   },
   {
    "timestamp": "2026-11-01T10:00:30Z",
+   "device_id": "SW_CAMPUS_10",
+   "source_id": "client-probe",
+   "metrics": {
+    "reachability": true
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:01:30Z",
+   "device_id": "SW_CAMPUS_10",
+   "source_id": "client-probe",
+   "metrics": {
+    "reachability": true
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:02:30Z",
+   "device_id": "SW_CAMPUS_10",
+   "source_id": "client-probe",
+   "metrics": {
+    "reachability": true
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:03:30Z",
+   "device_id": "SW_CAMPUS_10",
+   "source_id": "client-probe",
+   "metrics": {
+    "reachability": true
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:04:30Z",
+   "device_id": "SW_CAMPUS_10",
+   "source_id": "client-probe",
+   "metrics": {
+    "reachability": true
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:00:30Z",
    "device_id": "SW_CAMPUS_2",
    "source_id": "switch-telemetry",
    "metrics": {
-    "cpu_utilization_pct": 31.3,
-    "memory_pct": 40.9,
+    "cpu_utilization_pct": 28.0,
+    "memory_pct": 50.5,
     "queue_drops": 310
    }
   },
@@ -153,9 +193,9 @@
    "device_id": "SW_CAMPUS_2",
    "source_id": "switch-telemetry",
    "metrics": {
-    "cpu_utilization_pct": 25.0,
-    "memory_pct": 45.5,
-    "queue_drops": 310
+    "cpu_utilization_pct": 27.0,
+    "memory_pct": 40.5,
+    "queue_drops": 315
    }
   },
   {
@@ -163,9 +203,9 @@
    "device_id": "SW_CAMPUS_2",
    "source_id": "switch-telemetry",
    "metrics": {
-    "cpu_utilization_pct": 28.9,
-    "memory_pct": 42.5,
-    "queue_drops": 310
+    "cpu_utilization_pct": 26.7,
+    "memory_pct": 49.6,
+    "queue_drops": 320
    }
   },
   {
@@ -173,9 +213,9 @@
    "device_id": "SW_CAMPUS_2",
    "source_id": "switch-telemetry",
    "metrics": {
-    "cpu_utilization_pct": 23.8,
-    "memory_pct": 44.9,
-    "queue_drops": 310
+    "cpu_utilization_pct": 34.0,
+    "memory_pct": 40.1,
+    "queue_drops": 321
    }
   },
   {
@@ -183,9 +223,9 @@
    "device_id": "SW_CAMPUS_2",
    "source_id": "switch-telemetry",
    "metrics": {
-    "cpu_utilization_pct": 25.9,
-    "memory_pct": 43.2,
-    "queue_drops": 310
+    "cpu_utilization_pct": 31.0,
+    "memory_pct": 48.2,
+    "queue_drops": 323
    }
   },
   {
@@ -195,9 +235,9 @@
    "metrics": {
     "dhcp_success": true,
     "dns_success": true,
-    "jitter_ms": 50.7,
-    "latency_ms": 276.6,
-    "packet_loss_pct": 1.84,
+    "jitter_ms": 52.2,
+    "latency_ms": 236.1,
+    "packet_loss_pct": 2.13,
     "reachability": true
    }
   },
@@ -208,9 +248,9 @@
    "metrics": {
     "dhcp_success": true,
     "dns_success": true,
-    "jitter_ms": 32.3,
-    "latency_ms": 256.7,
-    "packet_loss_pct": 1.03,
+    "jitter_ms": 31.1,
+    "latency_ms": 235.0,
+    "packet_loss_pct": 1.52,
     "reachability": true
    }
   },
@@ -221,9 +261,9 @@
    "metrics": {
     "dhcp_success": true,
     "dns_success": true,
-    "jitter_ms": 35.5,
-    "latency_ms": 233.8,
-    "packet_loss_pct": 1.07,
+    "jitter_ms": 40.5,
+    "latency_ms": 247.4,
+    "packet_loss_pct": 0.69,
     "reachability": true
    }
   },
@@ -234,9 +274,9 @@
    "metrics": {
     "dhcp_success": true,
     "dns_success": true,
-    "jitter_ms": 43.6,
-    "latency_ms": 270.1,
-    "packet_loss_pct": 1.04,
+    "jitter_ms": 35.0,
+    "latency_ms": 308.1,
+    "packet_loss_pct": 1.17,
     "reachability": true
    }
   },
@@ -247,9 +287,9 @@
    "metrics": {
     "dhcp_success": true,
     "dns_success": true,
-    "jitter_ms": 29.0,
-    "latency_ms": 289.4,
-    "packet_loss_pct": 0.95,
+    "jitter_ms": 27.9,
+    "latency_ms": 266.2,
+    "packet_loss_pct": 1.85,
     "reachability": true
    }
   },
@@ -305,65 +345,185 @@
   },
   {
    "timestamp": "2026-11-01T10:00:30Z",
-   "device_id": "SW_CAMPUS_8",
+   "device_id": "SW_CAMPUS_5",
    "source_id": "client-probe",
    "metrics": {
-    "dhcp_success": true,
-    "dns_success": true,
-    "jitter_ms": 1.8,
-    "latency_ms": 11.1,
-    "packet_loss_pct": 0.0,
     "reachability": true
    }
   },
   {
    "timestamp": "2026-11-01T10:01:30Z",
-   "device_id": "SW_CAMPUS_8",
+   "device_id": "SW_CAMPUS_5",
    "source_id": "client-probe",
    "metrics": {
-    "dhcp_success": true,
-    "dns_success": true,
-    "jitter_ms": 2.9,
-    "latency_ms": 6.2,
-    "packet_loss_pct": 0.0,
     "reachability": true
    }
   },
   {
    "timestamp": "2026-11-01T10:02:30Z",
-   "device_id": "SW_CAMPUS_8",
+   "device_id": "SW_CAMPUS_5",
    "source_id": "client-probe",
    "metrics": {
-    "dhcp_success": true,
-    "dns_success": true,
-    "jitter_ms": 2.5,
-    "latency_ms": 9.3,
-    "packet_loss_pct": 0.0,
     "reachability": true
    }
   },
   {
    "timestamp": "2026-11-01T10:03:30Z",
-   "device_id": "SW_CAMPUS_8",
+   "device_id": "SW_CAMPUS_5",
    "source_id": "client-probe",
    "metrics": {
-    "dhcp_success": true,
-    "dns_success": true,
-    "jitter_ms": 1.6,
-    "latency_ms": 8.3,
-    "packet_loss_pct": 0.0,
     "reachability": true
    }
   },
   {
    "timestamp": "2026-11-01T10:04:30Z",
+   "device_id": "SW_CAMPUS_5",
+   "source_id": "client-probe",
+   "metrics": {
+    "reachability": true
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:00:30Z",
+   "device_id": "SW_CAMPUS_6",
+   "source_id": "client-probe",
+   "metrics": {
+    "reachability": true
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:01:30Z",
+   "device_id": "SW_CAMPUS_6",
+   "source_id": "client-probe",
+   "metrics": {
+    "reachability": true
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:02:30Z",
+   "device_id": "SW_CAMPUS_6",
+   "source_id": "client-probe",
+   "metrics": {
+    "reachability": true
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:03:30Z",
+   "device_id": "SW_CAMPUS_6",
+   "source_id": "client-probe",
+   "metrics": {
+    "reachability": true
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:04:30Z",
+   "device_id": "SW_CAMPUS_6",
+   "source_id": "client-probe",
+   "metrics": {
+    "reachability": true
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:00:30Z",
+   "device_id": "SW_CAMPUS_7",
+   "source_id": "client-probe",
+   "metrics": {
+    "reachability": true
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:01:30Z",
+   "device_id": "SW_CAMPUS_7",
+   "source_id": "client-probe",
+   "metrics": {
+    "reachability": true
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:02:30Z",
+   "device_id": "SW_CAMPUS_7",
+   "source_id": "client-probe",
+   "metrics": {
+    "reachability": true
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:03:30Z",
+   "device_id": "SW_CAMPUS_7",
+   "source_id": "client-probe",
+   "metrics": {
+    "reachability": true
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:04:30Z",
+   "device_id": "SW_CAMPUS_7",
+   "source_id": "client-probe",
+   "metrics": {
+    "reachability": true
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:00:30Z",
    "device_id": "SW_CAMPUS_8",
    "source_id": "client-probe",
    "metrics": {
     "dhcp_success": true,
     "dns_success": true,
     "jitter_ms": 1.1,
-    "latency_ms": 8.9,
+    "latency_ms": 11.9,
+    "packet_loss_pct": 0.0,
+    "reachability": true
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:01:30Z",
+   "device_id": "SW_CAMPUS_8",
+   "source_id": "client-probe",
+   "metrics": {
+    "dhcp_success": true,
+    "dns_success": true,
+    "jitter_ms": 1.6,
+    "latency_ms": 11.5,
+    "packet_loss_pct": 0.0,
+    "reachability": true
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:02:30Z",
+   "device_id": "SW_CAMPUS_8",
+   "source_id": "client-probe",
+   "metrics": {
+    "dhcp_success": true,
+    "dns_success": true,
+    "jitter_ms": 2.7,
+    "latency_ms": 9.1,
+    "packet_loss_pct": 0.0,
+    "reachability": true
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:03:30Z",
+   "device_id": "SW_CAMPUS_8",
+   "source_id": "client-probe",
+   "metrics": {
+    "dhcp_success": true,
+    "dns_success": true,
+    "jitter_ms": 1.1,
+    "latency_ms": 6.9,
+    "packet_loss_pct": 0.0,
+    "reachability": true
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:04:30Z",
+   "device_id": "SW_CAMPUS_8",
+   "source_id": "client-probe",
+   "metrics": {
+    "dhcp_success": true,
+    "dns_success": true,
+    "jitter_ms": 2.9,
+    "latency_ms": 13.1,
     "packet_loss_pct": 0.0,
     "reachability": true
    }
@@ -424,8 +584,8 @@
    "source_id": "switch-telemetry",
    "metrics": {
     "interface_errors": 12,
-    "link_utilization_pct": 38.3,
-    "throughput_mbps": 383.0
+    "link_utilization_pct": 41.4,
+    "throughput_mbps": 414.0
    }
   },
   {
@@ -434,8 +594,8 @@
    "source_id": "switch-telemetry",
    "metrics": {
     "interface_errors": 12,
-    "link_utilization_pct": 34.7,
-    "throughput_mbps": 347.0
+    "link_utilization_pct": 31.8,
+    "throughput_mbps": 318.0
    }
   },
   {
@@ -443,9 +603,9 @@
    "link_id": "DEPT_UPLINK_01",
    "source_id": "switch-telemetry",
    "metrics": {
-    "interface_errors": 12,
-    "link_utilization_pct": 34.8,
-    "throughput_mbps": 348.0
+    "interface_errors": 13,
+    "link_utilization_pct": 40.4,
+    "throughput_mbps": 404.0
    }
   },
   {
@@ -453,9 +613,9 @@
    "link_id": "DEPT_UPLINK_01",
    "source_id": "switch-telemetry",
    "metrics": {
-    "interface_errors": 12,
-    "link_utilization_pct": 31.4,
-    "throughput_mbps": 314.0
+    "interface_errors": 13,
+    "link_utilization_pct": 33.9,
+    "throughput_mbps": 339.0
    }
   },
   {
@@ -463,9 +623,9 @@
    "link_id": "DEPT_UPLINK_01",
    "source_id": "switch-telemetry",
    "metrics": {
-    "interface_errors": 12,
-    "link_utilization_pct": 33.7,
-    "throughput_mbps": 337.0
+    "interface_errors": 14,
+    "link_utilization_pct": 41.1,
+    "throughput_mbps": 411.0
    }
   },
   {
@@ -473,7 +633,7 @@
    "link_id": "HOSTEL_AP_LINK_01",
    "source_id": "switch-telemetry",
    "metrics": {
-    "link_utilization_pct": 20.0,
+    "link_utilization_pct": 24.6,
     "packet_loss_pct": 0.0
    }
   },
@@ -482,7 +642,7 @@
    "link_id": "HOSTEL_AP_LINK_01",
    "source_id": "switch-telemetry",
    "metrics": {
-    "link_utilization_pct": 15.2,
+    "link_utilization_pct": 19.4,
     "packet_loss_pct": 0.0
    }
   },
@@ -491,7 +651,7 @@
    "link_id": "HOSTEL_AP_LINK_01",
    "source_id": "switch-telemetry",
    "metrics": {
-    "link_utilization_pct": 21.0,
+    "link_utilization_pct": 18.8,
     "packet_loss_pct": 0.0
    }
   },
@@ -500,7 +660,7 @@
    "link_id": "HOSTEL_AP_LINK_01",
    "source_id": "switch-telemetry",
    "metrics": {
-    "link_utilization_pct": 23.6,
+    "link_utilization_pct": 17.9,
     "packet_loss_pct": 0.0
    }
   },
@@ -509,7 +669,7 @@
    "link_id": "HOSTEL_AP_LINK_01",
    "source_id": "switch-telemetry",
    "metrics": {
-    "link_utilization_pct": 19.7,
+    "link_utilization_pct": 18.9,
     "packet_loss_pct": 0.0
    }
   },
@@ -519,8 +679,8 @@
    "source_id": "switch-telemetry",
    "metrics": {
     "interface_errors": 12,
-    "link_utilization_pct": 95.7,
-    "throughput_mbps": 957.0
+    "link_utilization_pct": 93.2,
+    "throughput_mbps": 932.0
    }
   },
   {
@@ -528,39 +688,39 @@
    "link_id": "HOSTEL_UPLINK_01",
    "source_id": "switch-telemetry",
    "metrics": {
-    "interface_errors": 12,
-    "link_utilization_pct": 97.7,
-    "throughput_mbps": 977.0
-   }
-  },
-  {
-   "timestamp": "2026-11-01T10:02:30Z",
-   "link_id": "HOSTEL_UPLINK_01",
-   "source_id": "switch-telemetry",
-   "metrics": {
-    "interface_errors": 12,
-    "link_utilization_pct": 95.1,
-    "throughput_mbps": 951.0
-   }
-  },
-  {
-   "timestamp": "2026-11-01T10:03:30Z",
-   "link_id": "HOSTEL_UPLINK_01",
-   "source_id": "switch-telemetry",
-   "metrics": {
-    "interface_errors": 12,
-    "link_utilization_pct": 95.8,
-    "throughput_mbps": 958.0
-   }
-  },
-  {
-   "timestamp": "2026-11-01T10:04:30Z",
-   "link_id": "HOSTEL_UPLINK_01",
-   "source_id": "switch-telemetry",
-   "metrics": {
-    "interface_errors": 12,
+    "interface_errors": 14,
     "link_utilization_pct": 97.4,
     "throughput_mbps": 974.0
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:02:30Z",
+   "link_id": "HOSTEL_UPLINK_01",
+   "source_id": "switch-telemetry",
+   "metrics": {
+    "interface_errors": 14,
+    "link_utilization_pct": 93.5,
+    "throughput_mbps": 935.0
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:03:30Z",
+   "link_id": "HOSTEL_UPLINK_01",
+   "source_id": "switch-telemetry",
+   "metrics": {
+    "interface_errors": 15,
+    "link_utilization_pct": 96.2,
+    "throughput_mbps": 962.0
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:04:30Z",
+   "link_id": "HOSTEL_UPLINK_01",
+   "source_id": "switch-telemetry",
+   "metrics": {
+    "interface_errors": 16,
+    "link_utilization_pct": 94.8,
+    "throughput_mbps": 948.0
    }
   }
  ],

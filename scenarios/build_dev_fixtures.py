@@ -27,6 +27,7 @@ SWITCH, PROBE, WLC = "switch-telemetry", "client-probe", "wlc-telemetry"
 UPLINKS = {"HOSTEL_UPLINK_01": "SW_CAMPUS_1", "DEPT_UPLINK_01": "SW_CAMPUS_2"}
 PROBED = ["SW_CAMPUS_3", "SW_CAMPUS_8"]          # one client probe per zone
 CHECKED = ["SW_CAMPUS_3", "SW_CAMPUS_4", "SW_CAMPUS_8", "SW_CAMPUS_9"]   # DNS/DHCP clients
+ACCESS = [f"SW_CAMPUS_{n}" for n in range(3, 11)]                        # reachability probe on every access switch
 
 Series = list[Any]
 
@@ -40,6 +41,13 @@ class Scenario:
 
     def noisy(self, low: float, high: float, digits: int = 1) -> Series:
         return [round(self.rng.uniform(low, high), digits) for _ in TIMES]
+
+    def counter(self, start: int, low: int, high: int) -> Series:
+        """A cumulative counter that grows by low..high per minute (healthy links still tick)."""
+        values = [start]
+        for _ in TIMES[1:]:
+            values.append(values[-1] + self.rng.randint(low, high))
+        return values
 
     def set(self, kind: str, target: str, source: str, metric: str, values: Series) -> None:
         assert len(values) == len(TIMES)
@@ -59,17 +67,17 @@ class Scenario:
 
 
 def background(seed: int) -> Scenario:
-    """A healthy campus: moderate load, flat counters, passing service checks."""
+    """A healthy campus: moderate load, slowly ticking counters, passing service and path checks."""
     s = Scenario(seed)
     for link in UPLINKS:
         util = s.noisy(28, 42)
         s.set("link_id", link, SWITCH, "link_utilization_pct", util)
         s.set("link_id", link, SWITCH, "throughput_mbps", [round(u * 10, 1) for u in util])
-        s.set("link_id", link, SWITCH, "interface_errors", [12] * 5)
+        s.set("link_id", link, SWITCH, "interface_errors", s.counter(12, 0, 2))
     for switch in UPLINKS.values():
         s.set("device_id", switch, SWITCH, "cpu_utilization_pct", s.noisy(18, 34))
         s.set("device_id", switch, SWITCH, "memory_pct", s.noisy(40, 52))
-        s.set("device_id", switch, SWITCH, "queue_drops", [310] * 5)
+        s.set("device_id", switch, SWITCH, "queue_drops", s.counter(310, 0, 5))
     for device in PROBED:
         s.set("device_id", device, PROBE, "latency_ms", s.noisy(6, 14))
         s.set("device_id", device, PROBE, "jitter_ms", s.noisy(1, 3))
@@ -77,6 +85,7 @@ def background(seed: int) -> Scenario:
     for device in CHECKED:
         s.set("device_id", device, PROBE, "dns_success", [True] * 5)
         s.set("device_id", device, PROBE, "dhcp_success", [True] * 5)
+    for device in ACCESS:
         s.set("device_id", device, PROBE, "reachability", [True] * 5)
     s.set("device_id", "SRV_DNS_DHCP_01", PROBE, "reachability", [True] * 5)
     s.set("device_id", "HOSTEL_AP_01", WLC, "rssi_dbm", s.noisy(-60, -54, 0))
@@ -193,7 +202,7 @@ def unit_mismatch() -> dict[str, Any]:
 
 def counter_reset() -> dict[str, Any]:
     s = background(111)
-    s.set("link_id", "ACC_LINK_05", SWITCH, "interface_errors", [520, 520, 0, 0, 0])
+    s.set("link_id", "ACC_LINK_05", SWITCH, "interface_errors", [518, 520, 0, 1, 2])   # reboot, then normal ticking
     s.set("device_id", "SW_CAMPUS_5", PROBE, "packet_loss_pct", [0.0] * 5)
     s.set("device_id", "SW_CAMPUS_5", PROBE, "reachability", [True] * 5)
     return wrap("INC-0111", "Switch SW_CAMPUS_5 rebooted overnight; check it is fine", s.records())

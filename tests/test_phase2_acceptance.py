@@ -85,12 +85,70 @@ def test_connectivity_uses_peers_and_control_run_differs(name: str) -> None:
     consumed = {mid for p in conn_normal for mid in p["consumed_message_ids"]}
     peer_ids = {m.message_id for m in normal.findings if m.sender in ("performance_agent", "infrastructure_agent")}
     assert consumed and consumed <= peer_ids
-    assert faults(conn_normal) != faults(conn_control)
+    claims = lambda payloads: {(p["hypothesis"], p["stance"]) for p in payloads}   # noqa: E731
+    assert claims(conn_normal) != claims(conn_control)
     assert not any(p["consumed_message_ids"] for p in conn_control)
 
 
-def test_connectivity_localises_congestion_to_the_shared_uplink() -> None:
-    assert "upstream_dependency@HOSTEL_UPLINK_01" in faults(findings(run("congestion"), "connectivity_agent"))
+def test_connectivity_scopes_congestion_with_its_own_checks() -> None:
+    conn = findings(run("congestion"), "connectivity_agent")
+    [scope] = [p for p in conn if p["hypothesis"] == "link_congestion@HOSTEL_UPLINK_01"]
+    assert scope["stance"] == "supports" and len(scope["consumed_message_ids"]) == 2
+    assert "blast radius" in scope["reason"]
+    assert not any(p["hypothesis"].startswith("upstream_dependency") for p in conn)
+
+
+# --------------------------------------------------------------------------- Phase 2 review (R1, R2, R4)
+
+@pytest.mark.parametrize("name, control", [(n, True) for n in FAULTS_NEEDING_PEERS] + [("missing_stale", False)])
+def test_r1_connectivity_never_supports_health(name: str, control: bool) -> None:
+    conn = findings(run(name, control=control), "connectivity_agent")
+    assert not [p["hypothesis"] for p in conn if p["stance"] == "supports" and p["hypothesis"].startswith("healthy@")]
+
+
+def test_r1_missing_stale_gives_no_path_health_claim() -> None:
+    conn = findings(run("missing_stale"), "connectivity_agent")
+    assert {p["hypothesis"] for p in conn if p["hypothesis"].startswith("healthy@")} <= {"healthy@SRV_DNS_DHCP_01"}
+
+
+@pytest.mark.parametrize("name", FAULTS_NEEDING_PEERS + ["schema_0_9", "duplicate_message", "unit_mismatch"])
+def test_r2_connectivity_never_recites_consumed_peer_evidence(name: str) -> None:
+    result = run(name)
+    peer_evidence = {m.message_id: set(m.payload["evidence_ids"]) for m in result.findings}
+    for p in findings(result, "connectivity_agent"):
+        consumed = set().union(*(peer_evidence.get(mid, set()) for mid in p["consumed_message_ids"]))
+        assert not set(p["evidence_ids"]) & consumed, p["finding_id"]
+
+
+@pytest.mark.parametrize("name", FAULTS_NEEDING_PEERS)
+def test_r2_no_upstream_dependency_for_a_single_fault_target(name: str) -> None:
+    assert not [h for h in faults(findings(run(name), "connectivity_agent")) if h.startswith("upstream_dependency")]
+
+
+def test_r2_weak_wifi_checks_the_ap_uplink() -> None:
+    conn = findings(run("weak_wifi"), "connectivity_agent")
+    [uplink] = [p for p in conn if p["hypothesis"] == "healthy@HOSTEL_AP_LINK_01"]
+    assert uplink["stance"] == "contradicts" and uplink["consumed_message_ids"]
+
+
+def _with_extra_error_growth(name: str) -> dict:
+    """AI 3's probe: +1 interface error per minute on every interface_errors series."""
+    fixture = json.loads((DEV / f"{name}.json").read_text(encoding="utf-8"))
+    seen: dict[str, int] = {}
+    for record in fixture["records"]:
+        if "interface_errors" in record["metrics"]:
+            key = record.get("link_id") or record.get("device_id")
+            seen[key] = seen.get(key, -1) + 1
+            record["metrics"]["interface_errors"] += seen[key]
+    return fixture
+
+
+@pytest.mark.parametrize("name", ["normal", "false_report"])
+def test_r4_healthy_network_with_counter_growth_raises_no_fault(name: str) -> None:
+    for fixture in (json.loads((DEV / f"{name}.json").read_text(encoding="utf-8")), _with_extra_error_growth(name)):
+        result = run_incident(fixture, TOPOLOGY, SIGNATURES, components=default_components(connectivity="local"))
+        assert not faults([m.payload for m in result.findings]), [m.payload["hypothesis"] for m in result.findings
+                                                                   if m.payload["stance"] == "supports"]
 
 
 def test_trace_holds_the_wire_request_and_response() -> None:
@@ -162,3 +220,13 @@ def test_cli_run_writes_report_and_trace(scenario: str, status: str, tmp_path: P
     assert saved == printed and (tmp_path / "t" / f"{printed['incident_id']}.jsonl").exists()
     if status == "invalid_input":
         assert printed["validation_errors"] and printed["confidence"] is None
+
+
+def test_cli_control_run_does_not_overwrite_the_normal_run(tmp_path: Path, capsys) -> None:
+    from netcoop.cli import main
+    scenario = str(ROOT / "scenarios/dev/congestion.json")
+    for extra in ([], ["--control"]):
+        main(["run", scenario, "--local", "--out", str(tmp_path / "r"), "--traces", str(tmp_path / "t"), *extra])
+    capsys.readouterr()
+    assert sorted(f.name for f in (tmp_path / "r").iterdir()) == ["INC-0103--control.json", "INC-0103.json"]
+    assert sorted(f.name for f in (tmp_path / "t").iterdir()) == ["INC-0103--control.jsonl", "INC-0103.jsonl"]
