@@ -29,6 +29,7 @@ class IncidentContext:
     normalization_log: list[str] = field(default_factory=list)
     on_demand: list[Observation] = field(default_factory=list)   # probe samples, released by probe()
     complaint: str = ""                   # the operator's free-text report; scopes the healthy gate
+    input_warnings: list[str] = field(default_factory=list)   # telemetry skipped or doubtful; blocks healthy
 
     def __post_init__(self) -> None:
         if self.clock.tzinfo is None:

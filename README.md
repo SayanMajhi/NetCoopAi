@@ -82,7 +82,7 @@ Agents nominate hypotheses; the **Correlation agent** re-checks each one against
 ### What every report tells you
 - `summary`: one plain sentence, e.g. *Probably link congestion on DEPT_UPLINK_01, affecting SW_CAMPUS_2, but not confirmed: interface_fault@DEPT_UPLINK_01 cannot yet be ruled out. Verify before acting.*
 - `supporting_evidence[]`: evidence ID, metric, value, unit, raw source, per-interval delta for counters, and `interpretation` against the configured threshold (*above critical 90 percent*).
-- `validation_errors`: every input message the bus rejected, with its typed code and field (`SCHEMA_VERSION_UNSUPPORTED`, `MISSING_FIELD`, `DUPLICATE_MESSAGE`, ...).
+- `validation_errors`: every input message the bus rejected, with its typed code and field (`SCHEMA_VERSION_UNSUPPORTED`, `MISSING_FIELD`, `DUPLICATE_MESSAGE`, ...), and every telemetry item the normalizer skipped (an unknown metric or key, or a record with no usable timestamp, target or metrics). One bad item does not reject the incident: the rest is diagnosed, and only an input with nothing usable left is `invalid_input`. Skipped items, or utilization that looks like a 0–1 fraction, rule out a `healthy` verdict, because the fault could be in the data that was not read. Aliases such as `ping_ms`, `rtt_ms`, `latency_s` and `jitter_s` are mapped (seconds ×1000) and logged.
 - `limitations`: the time window, the confidence cap, any malformed/missing/stale readings that were excluded, and the before/after ranking of each QUERY round.
 
 ### Held-out evaluation (Phase 4)

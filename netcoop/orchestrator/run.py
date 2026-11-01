@@ -130,6 +130,7 @@ class _Run:
         self.wire: list[dict[str, Any]] = []
         self.conversions: list[str] = []
         self.known_evidence: Optional[set[str]] = None
+        self.input_rejections: list[str] = []   # telemetry items the normalizer skipped (typed)
 
     def deliver(self, raw: Any) -> Optional[Envelope]:
         """Every message goes through the bus; rejects are kept as typed ERRORs. A FINDING
@@ -221,9 +222,15 @@ def _run_incident(fixture: Any, topology: dict[str, Any], signatures: dict[str, 
     ctx = IncidentContext(incident_id=incident_id, clock=clock, observations=list(norm.observations),
                           topology=topology, signatures=signatures, normalization_log=norm.normalization_log,
                           on_demand=list(norm.on_demand),
-                          complaint=fixture.get("complaint") if isinstance(fixture.get("complaint"), str) else "")
+                          complaint=fixture.get("complaint") if isinstance(fixture.get("complaint"), str) else "",
+                          input_warnings=list(norm.skipped) + list(norm.suspect))
     run = _Run(incident_id, clock)
     run.known_evidence = {o.evidence_id for o in norm.observations}
+    run.input_rejections = list(norm.skipped)
+    if norm.skipped:
+        run.limitations.append(f"input: {len(norm.skipped)} telemetry item(s) skipped as unusable and listed in "
+                               "validation_errors; the diagnosis uses the rest")
+    run.limitations.extend(norm.suspect)
     run.limitations.extend(comps.unavailable)
     run.limitations.extend(_sparse_telemetry(norm, signatures))
     orch = _Orchestrator()
@@ -355,7 +362,7 @@ PROTOCOL_ERRORS = {ErrorCode.SCHEMA_VERSION_UNSUPPORTED, ErrorCode.MISSING_FIELD
 
 def _rejections(run: _Run) -> list[str]:
     codes = {c.value for c in PROTOCOL_ERRORS}
-    out = []
+    out = list(run.input_rejections)
     for m in run.messages:
         if m.type != MessageType.ERROR.value or m.payload.get("code") not in codes:
             continue

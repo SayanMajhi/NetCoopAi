@@ -16,3 +16,5 @@ class NormalizationResult:
     validation_errors: list[str] = field(default_factory=list)   # non-empty => invalid_input report
     window_end: Optional[datetime] = None                        # incident clock; timezone-aware
     on_demand: list[Observation] = field(default_factory=list)   # probe samples released only to answer a QUERY
+    skipped: list[str] = field(default_factory=list)   # typed, e.g. "INVALID_VALUE records[3].metrics.x: ...; skipped"
+    suspect: list[str] = field(default_factory=list)   # kept but doubtful, e.g. utilization that looks like a 0-1 fraction
