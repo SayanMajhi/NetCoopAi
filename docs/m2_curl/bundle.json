@@ -36,12 +36,12 @@
       "payload": {
         "finding_id": "F-INF-01",
         "hypothesis": "link_congestion@HOSTEL_UPLINK_01",
-        "stance": "contradicts",
+        "stance": "supports",
         "target_hypothesis": "link_congestion@HOSTEL_UPLINK_01",
         "evidence_ids": [
           "EV-014"
         ],
-        "reason": "Interface errors rise while utilization stays below baseline",
+        "reason": "uplink utilization sustained at 96%",
         "score": 0.6,
         "consumed_message_ids": []
       },
@@ -55,10 +55,10 @@
       "observed_at": "2026-10-31T10:29:00Z",
       "link_id": "HOSTEL_UPLINK_01",
       "metric": "link_utilization_pct",
-      "value": 41.0,
+      "value": 96.0,
       "unit": "%",
       "original_field": "metrics.link_utilization_pct",
-      "original_value": 41.0,
+      "original_value": 96.0,
       "normalization_steps": [],
       "quality_flags": [
         "ok"

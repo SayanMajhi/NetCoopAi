@@ -16,12 +16,16 @@ ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = Draft202012Validator(json.loads((ROOT / "schemas" / "message-1.0.json").read_text(encoding="utf-8")))
 BUNDLE_SCHEMA = Draft202012Validator(json.loads((ROOT / "schemas" / "bundle-1.0.json").read_text(encoding="utf-8")))
 TASK = json.loads((ROOT / "examples" / "task.json").read_text(encoding="utf-8"))
-FINDING = json.loads((ROOT / "examples" / "finding.json").read_text(encoding="utf-8"))
+# examples/finding.json says "not congestion" (X contradicts X; PROTOCOL.md "Reading stance").
+# A peer that Connectivity should localise must name a fault, so the default peer supports it.
+NOT_CONGESTION = json.loads((ROOT / "examples" / "finding.json").read_text(encoding="utf-8"))
+FINDING = copy.deepcopy(NOT_CONGESTION)
+FINDING["payload"].update(stance="supports", reason="uplink utilization sustained at 96%")
 TOPOLOGY = json.loads((ROOT / "scenarios" / "topology.json").read_text(encoding="utf-8"))
 OBSERVATION = {
     "evidence_id": "EV-014", "source_id": "switch-telemetry", "observed_at": "2026-10-31T10:29:00Z",
-    "link_id": "HOSTEL_UPLINK_01", "metric": "link_utilization_pct", "value": 41.0, "unit": "%",
-    "original_field": "metrics.link_utilization_pct", "original_value": 41.0,
+    "link_id": "HOSTEL_UPLINK_01", "metric": "link_utilization_pct", "value": 96.0, "unit": "%",
+    "original_field": "metrics.link_utilization_pct", "original_value": 96.0,
     "normalization_steps": [], "quality_flags": ["ok"],
 }
 
@@ -76,6 +80,14 @@ def test_valid_bundle_gets_the_connectivity_analysis(client):
     assert reply["timestamp"] == TASK["timestamp"]           # incident clock, not wall clock
     assert reply["payload"]["hypothesis"] == "upstream_dependency@HOSTEL_UPLINK_01"
     assert reply["payload"]["consumed_message_ids"] == ["INC-0001-INF-02"]
+
+
+def test_not_x_peer_localises_nothing(client):
+    """A "not congestion" peer must not be read as evidence of a fault (regression)."""
+    replies = reply_messages(client.post("/messages", json=bundle(message(TASK), message(NOT_CONGESTION))), 200)
+    assert not any(m["type"] == "FINDING" and m["payload"]["hypothesis"].startswith("upstream_dependency")
+                   for m in replies)
+    assert all(not m["payload"].get("consumed_message_ids") for m in replies if m["type"] == "FINDING")
 
 
 def test_bundle_with_only_a_task_gets_a_response(client):

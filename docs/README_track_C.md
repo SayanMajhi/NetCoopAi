@@ -180,7 +180,8 @@ Example (from the repo root; `curl.exe` in PowerShell):
 curl -i -H "Content-Type: application/json" --data @docs/m2_curl/bundle.json localhost:8001/messages
 ```
 
-`docs/m2_curl/bundle_bad_peer.json` is the same Bundle with `stance` removed from the peer FINDING.
+Its peer FINDING **supports** `link_congestion@HOSTEL_UPLINK_01`, so the reply is `upstream_dependency@HOSTEL_UPLINK_01` with `consumed_message_ids: ["INC-0001-INF-02"]`.
+`docs/m2_curl/bundle_bad_peer.json` is the same Bundle with `stance` removed from the peer FINDING: HTTP 200, a RESPONSE for the TASK and an ERROR `MISSING_FIELD` at `messages.1.payload.stance`.
 The Phase 1 proof (`docs/m1_curl/`) used single messages and no longer matches the endpoint.
 
 ### Connectivity reasoning — `connectivity_service/logic.py` (C3)
@@ -195,13 +196,13 @@ needs thresholds: the checks it owns are booleans. Missing, stale or malformed c
 | Same, but the server itself is unreachable | `upstream_dependency@SRV_LINK_01` **contradicts** `dns_failure` / `dhcp_failure` |
 | Every client's check succeeds | `healthy@SRV_DNS_DHCP_01` **contradicts** `dns_failure` / `dhcp_failure` |
 | Devices unreachable, all behind one link | `upstream_dependency@<link>` (or `@<switch>` when the switch just below still answers), with the blast radius |
-| **Peer FINDINGs** naming faults on topology elements | `upstream_dependency@<deepest link they all share>` with blast radius and `consumed_message_ids`; 0.7 if two agents agree, 0.5 if one, 0.4 per link when the faults share no upstream |
+| **Peer FINDINGs** naming faults on topology elements (a `supports` finding, or a `contradicts` finding that offers a different hypothesis; "X contradicts X" only means "not X" and is ignored, see PROTOCOL.md "Reading stance") | `upstream_dependency@<deepest link they all share>` with blast radius and `consumed_message_ids`; 0.7 if two agents agree, 0.5 if one, 0.4 per link when the faults share no upstream |
 | No peer faults, every own check passes | `healthy@<common upstream of the TASK scope>` |
 | No checks of its own and no usable peers | a `RESPONSE` saying it cannot judge |
 
 So the peers change the conclusion: on congestion the normal run says
 `upstream_dependency@HOSTEL_UPLINK_01` (consuming the Performance/Infrastructure findings), the
-`--control` run says `healthy@HOSTEL_UPLINK_01`. Peer evidence IDs that are not in the Bundle are
+`--control` run, with no peers, can only say `healthy@<common upstream of the TASK scope>` (`CORE_RTR_01` for a campus-wide scope). Peer evidence IDs that are not in the Bundle are
 never cited. If the analysis crashes, the service answers HTTP 500 with a typed `AGENT_FAILURE` ERROR.
 
 ### Remote client — `netcoop/orchestrator/remote.py` (C4)

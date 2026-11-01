@@ -133,6 +133,19 @@ def test_contradicting_peer_still_localises_its_own_cause() -> None:
     assert hyps(payloads) == ["upstream_dependency@DEPT_UPLINK_01"]
 
 
+def test_not_x_peers_localise_nothing() -> None:
+    """"X contradicts X" only means "not X" (PROTOCOL.md "Reading stance"); on a healthy
+    network the Performance agent sends these for every link, and they are not faults."""
+    obs = observations([("HOSTEL_UPLINK_01", "link_utilization_pct", [31, 35, 33, 30, 34]),
+                        ("DEPT_UPLINK_01", "link_utilization_pct", [28, 30, 29, 31, 27]),
+                        ("SW_CAMPUS_3", "dns_success", [True] * 5)])
+    payloads, _ = run(obs, lambda ctx: [
+        peer(ctx, "performance_agent", "link_congestion@HOSTEL_UPLINK_01", ["EV-001"], "contradicts"),
+        peer(ctx, "performance_agent", "link_congestion@DEPT_UPLINK_01", ["EV-006"], "contradicts")])
+    assert not any(h.startswith("upstream_dependency") for h in hyps(payloads))
+    assert all(not p["consumed_message_ids"] for p in payloads)
+
+
 def test_healthy_or_unknown_peers_localise_nothing() -> None:
     obs = observations(CONGESTION)
     payloads, _ = run(obs, lambda ctx: [

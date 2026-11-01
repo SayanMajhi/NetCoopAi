@@ -217,7 +217,11 @@ class ConnectivityAgent(BaseAgent):
         for peer in peers:
             hypothesis = peer.payload.get("hypothesis", "")
             target = target_of(hypothesis)
-            if cause_of(hypothesis) != "healthy" and topo.knows(target):
+            # supports names a fault; contradicts names one only when it offers a different
+            # hypothesis (an alternative). "X contradicts X" just means "not X".
+            names_fault = (peer.payload.get("stance") == Stance.supports.value
+                           or hypothesis != peer.payload.get("target_hypothesis", hypothesis))
+            if names_fault and cause_of(hypothesis) != "healthy" and topo.knows(target):
                 out.append((peer, target))
         return out
 
