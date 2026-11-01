@@ -19,6 +19,14 @@ The typed models in [`netcoop/protocol/models.py`](netcoop/protocol/models.py) a
 
 `in_reply_to` is `null` only for a new incident or an unsolicited finding.
 
+### Reading `stance` (all agents)
+- `supports`: the sender claims `hypothesis` is true; `target_hypothesis` equals `hypothesis`.
+- `contradicts`: the sender's evidence argues against `target_hypothesis`.
+  - `hypothesis == target_hypothesis` means only "not this" (e.g. `link_congestion@X` contradicts `link_congestion@X`: utilization is normal).
+  - `hypothesis != target_hypothesis` also proposes an alternative (e.g. `interface_fault@X` contradicts `link_congestion@X`).
+  - `healthy@X` contradicting `<cause>@X` says the target looks healthy.
+- A finding **names a fault** only if it `supports` a non-`healthy` hypothesis, or `contradicts` a different hypothesis with a non-`healthy` alternative. Receivers (Connectivity, Correlation) must not treat "not X" as evidence for X.
+
 ## Versioning and compatibility
 | Incoming | Behaviour |
 |---|---|
