@@ -1,0 +1,2 @@
+{"incident_id": "INC-0117", "window_end": "2026-11-01T10:05:00Z", "records": [
+  {"timestamp": "2026-11-01T10:00:30Z", "device_id": "SW_CAMPUS_1", "metrics": {"cpu_utilization_pct": 31.2}

@@ -1,0 +1,109 @@
+{
+ "incident_id": "INC-0114",
+ "window_end": "2026-11-01T10:05:00Z",
+ "complaint": "Alarm with an incomplete message",
+ "records": [
+  {
+   "timestamp": "2026-11-01T10:00:30Z",
+   "device_id": "SW_CAMPUS_1",
+   "source_id": "switch-telemetry",
+   "metrics": {
+    "cpu_utilization_pct": 22.4
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:01:30Z",
+   "device_id": "SW_CAMPUS_1",
+   "source_id": "switch-telemetry",
+   "metrics": {
+    "cpu_utilization_pct": 21.0
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:02:30Z",
+   "device_id": "SW_CAMPUS_1",
+   "source_id": "switch-telemetry",
+   "metrics": {
+    "cpu_utilization_pct": 26.7
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:03:30Z",
+   "device_id": "SW_CAMPUS_1",
+   "source_id": "switch-telemetry",
+   "metrics": {
+    "cpu_utilization_pct": 22.4
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:04:30Z",
+   "device_id": "SW_CAMPUS_1",
+   "source_id": "switch-telemetry",
+   "metrics": {
+    "cpu_utilization_pct": 26.2
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:00:30Z",
+   "device_id": "SW_CAMPUS_3",
+   "source_id": "client-probe",
+   "metrics": {
+    "latency_ms": 76.1
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:01:30Z",
+   "device_id": "SW_CAMPUS_3",
+   "source_id": "client-probe",
+   "metrics": {
+    "latency_ms": 109.2
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:02:30Z",
+   "device_id": "SW_CAMPUS_3",
+   "source_id": "client-probe",
+   "metrics": {
+    "latency_ms": 97.0
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:03:30Z",
+   "device_id": "SW_CAMPUS_3",
+   "source_id": "client-probe",
+   "metrics": {
+    "latency_ms": 81.8
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:04:30Z",
+   "device_id": "SW_CAMPUS_3",
+   "source_id": "client-probe",
+   "metrics": {
+    "latency_ms": 72.5
+   }
+  }
+ ],
+ "messages": [
+  {
+   "protocol": "netcoop/1.0",
+   "message_id": "INC-0114-EXT-01",
+   "incident_id": "INC-0114",
+   "in_reply_to": null,
+   "sender": "external_monitor",
+   "recipient": "correlation_agent",
+   "type": "FINDING",
+   "timestamp": "2026-11-01T10:05:00Z",
+   "payload": {
+    "finding_id": "F-EXT-01",
+    "hypothesis": "link_congestion@HOSTEL_UPLINK_01",
+    "target_hypothesis": "link_congestion@HOSTEL_UPLINK_01",
+    "evidence_ids": [
+     "EV-001"
+    ],
+    "reason": "external NMS alarm"
+   },
+   "extra": {}
+  }
+ ]
+}

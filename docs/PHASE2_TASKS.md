@@ -50,7 +50,7 @@ Stand-in versions of all of these live in `tests/test_pipeline.py` — copy thei
 
 ---
 
-## A — Lead (Sayan): agent base + pipeline + CLI  · critical path
+## A — Lead (Sayan): agent base + pipeline + CLI  · ✅ merged (PRs #12, #14)
 - [ ] **A1 (push first, within 30 min):** `netcoop/agents/base.py` per D2, with a test. This unblocks B and C.
 - [ ] **A2:** `netcoop/orchestrator/run.py`: `run_incident(fixture, topology, signatures, connectivity="remote"|"local", control=False) -> RunResult(report, messages, wire)` per D3. Never raises: bad input → `invalid_input` report; Connectivity unreachable → `insufficient_evidence` with limitation `connectivity_unreachable`.
 - [ ] **A3:** stub Correlation + Reporting: collect FINDINGs, emit a schema-valid `insufficient_evidence` report listing `agent_findings`, `evidence_sources`, `normalization_log` and limitation `correlation not implemented (Phase 3)`.
@@ -71,7 +71,7 @@ Stand-in versions of all of these live in `tests/test_pipeline.py` — copy thei
 - [ ] **C4:** `netcoop/orchestrator/remote.py`: HTTP client (`httpx`, timeout, 1 retry) returning the reply Bundle plus raw request/response bodies for the trace.
 - [ ] Tests: Bundle valid/invalid (the REST-card = `cards.py` test already exists in `tests/test_connectivity_service.py`); peer-consumption changes output; Infrastructure emits a `contradicts`.
 
-## D — UI/demo + fixtures (member D)
+## D — Sayan: fixtures + dashboard CI  · critical path now (agents need real scenarios)
 - [ ] **D1 (start now):** `scenarios/dev/` fixtures per D1 for the first six labels: `normal`, `congestion`, `interface_fault`, `weak_wifi`, `dns_failure`, `ambiguous_congestion_errors`. Values must be realistic and chosen **before** thresholds are known — don't tune to pass. Test: every fixture loads through the adapter; every ID is in the topology.
 - [ ] **D2:** remaining 11 fixtures (missing/stale, unit mismatch, counter reset, 0.9, 2.x, missing field, duplicate, timeout, malformed, false report, DHCP).
 - [ ] **D3:** CI job in `.github/workflows/ci.yml`: `cd dashboard && npm ci && npm run gen:types && git diff --exit-code && npm run build`.
