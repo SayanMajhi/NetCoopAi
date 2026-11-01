@@ -29,14 +29,14 @@ The typed models in [`netcoop/protocol/models.py`](netcoop/protocol/models.py) a
 
 ## Versioning and compatibility
 
-Contract tags: `contract-1.0` (wire contract), `contract-1.0.1` (schemas enforce the model rules), `contract-1.0.2` (Phase 2 review: `sender`/`recipient` must be non-empty; the "Reading `stance`" rule above is part of the contract). All are `netcoop/1.0`: the changes only reject inputs that were already invalid in meaning. `contract-1.0.3` (Phase 4, P4-1) adds one optional field, `EvidenceItem.interval_delta` (per-interval increase of a cumulative counter; null otherwise). It is additive: every 1.0.2 report is still valid, but strict readers built from the 1.0.2 schemas must regenerate (`netcoop export-schemas`, `npm run gen:types`) before they accept 1.0.3 reports.
+Contract tags: `contract-1.0` (wire contract), `contract-1.0.1` (schemas enforce the model rules), `contract-1.0.2` (Phase 2 review: `sender`/`recipient` must be non-empty; the "Reading `stance`" rule above is part of the contract). All are `netcoop/1.0`: the changes only reject inputs that were already invalid in meaning. `contract-1.0.3` (Phase 4, P4-1) adds one optional field, `EvidenceItem.interval_delta` (per-interval increase of a cumulative counter; null otherwise). It is additive: every 1.0.2 report is still valid, but strict readers built from the 1.0.2 schemas must regenerate (`netcoop export-schemas`, `npm run gen:types`) before they accept 1.0.3 reports. `contract-1.0.4` adds two optional report fields, also additive: `Report.summary` (one plain-language sentence) and `EvidenceItem.interpretation` (the value against its configured threshold, e.g. `above critical 90 percent`). The report now also lists every message the bus rejected (typed `ERROR`) in `validation_errors`, and its `confidence` is capped by status (`diagnosed`/`healthy` ≤ 0.95, `probable` ≤ 0.69); the uncapped heuristic-v1 score stays in the DECISION ranking and the cap is named in `limitations`.
 
 Receivers validate with the exported JSON Schema **and** the typed models: Python's `jsonschema` lets a `$` pattern match before a final newline, so the models (Rust regex) are the stricter second check. A message that fails either is a typed `ERROR`, never logged as valid.
 | Incoming | Behaviour |
 |---|---|
 | `netcoop/1.0` | validated as-is |
 | `netcoop/1.x` | accepted; unknown top-level fields moved into `extra`, with a conversion record |
-| `netcoop/0.9` | upgraded to 1.0 by `protocol/compat.py`, with a visible conversion record *(TODO: Lead)* |
+| `netcoop/0.9` | upgraded to 1.0 by `protocol/compat.py`; each renamed or defaulted field is listed in the report's `normalization_log` as `protocol upgrade ...` |
 | `netcoop/2.x` / unknown | `ERROR` with `SCHEMA_VERSION_UNSUPPORTED` |
 | missing required field | `ERROR` with `MISSING_FIELD` and `field_path` |
 | duplicate `message_id` | ignored, logged, `ERROR` with `DUPLICATE_MESSAGE` |
@@ -165,6 +165,7 @@ _Generated from `netcoop/protocol/models.py` (netcoop/1.0). Do not edit by hand.
 | `unit` | string | yes |  |
 | `source_id` | string | yes |  |
 | `interval_delta` | number / null | no | Cumulative counters only: increase since the previous sample of the same series. Null for non-counters, the first sample, after a gap, or on a counter reset |
+| `interpretation` | string / null | no | What the value means against its configured threshold, e.g. 'above critical 90 percent' (contract-1.0.4) |
 
 ### Report
 
@@ -173,6 +174,7 @@ _Generated from `netcoop/protocol/models.py` (netcoop/1.0). Do not edit by hand.
 | `incident_id` | string | yes |  |
 | `status` | Status | yes |  |
 | `suspected_root_cause` | string / null | yes |  |
+| `summary` | string / null | no | One plain-language sentence stating the outcome (contract-1.0.4) |
 | `confidence` | number / null | yes |  |
 | `confidence_method` | string | no |  |
 | `signature_version` | string | yes |  |

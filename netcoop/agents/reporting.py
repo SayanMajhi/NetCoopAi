@@ -37,6 +37,17 @@ ACTIONS: dict[str, list[str]] = {
     "upstream_dependency": ["Check the shared upstream {t} and the device just below it"],
 }
 
+CAUSE_TEXT = {"link_congestion": "link congestion", "weak_wifi": "a weak Wi-Fi signal",
+              "interface_fault": "an Ethernet/interface fault", "device_overload": "device overload",
+              "dns_failure": "a DNS service failure", "dhcp_failure": "a DHCP service failure",
+              "hardware_failure": "a hardware failure", "upstream_dependency": "an upstream dependency failure"}
+
+# Reported confidence is the heuristic-v1 score capped by status, so the number never says more than
+# the status does: nothing from one window is certain, and a cause that missed the diagnosed gate
+# (0.70) never outscores one that passed it. The uncapped score stays in the DECISION ranking.
+CONFIDENCE_CAP = {Status.diagnosed: 0.95, Status.healthy: 0.95, Status.probable: 0.69}
+EXCLUDED_FLAGS = ("malformed", "missing", "stale", "out_of_window")
+
 
 class ReportingAgent(BaseAgent):
     agent_id = "reporting_agent"
@@ -56,6 +67,17 @@ class ReportingAgent(BaseAgent):
             confidence = decision["healthy_confidence"]
         else:
             confidence = leader.confidence if leader else 0.0
+        cap = CONFIDENCE_CAP.get(status)
+        if cap is not None and confidence > cap:
+            why = ("a cause that missed the diagnosed gate is reported below 0.70" if status == Status.probable
+                   else "no conclusion from one telemetry window is reported as certain")
+            limitations.insert(0, f"heuristic-v1 score {confidence:.2f} reported as {cap:.2f}: {why}")
+            confidence = cap
+        limitations[0:0] = _data_quality(ctx)
+        if status in (Status.diagnosed, Status.probable, Status.healthy):
+            limitations.insert(0, f"based on the {ctx.signatures.get('window', {}).get('minutes', 5)}-minute window "
+                                  f"ending {ctx.clock.isoformat()}; confidence is the documented heuristic-v1 score, "
+                                  "not a calibrated probability")
 
         devices: list[str] = []
         segments: list[str] = []
@@ -113,8 +135,10 @@ class ReportingAgent(BaseAgent):
             per_series[key] = per_series.get(key, 0) + 1
             if per_series[key] > 3:
                 continue
+            delta = _interval_delta(ctx, o)
             items.append(EvidenceItem(evidence_id=o.evidence_id, metric=o.metric, value=o.value, unit=o.unit,
-                                      source_id=o.source_id, interval_delta=_interval_delta(ctx, o)))
+                                      source_id=o.source_id, interval_delta=delta,
+                                      interpretation=_interpret(ctx.threshold(o.metric), o, delta)))
         return items
 
 
@@ -132,6 +156,70 @@ def _interval_delta(ctx: IncidentContext, o: Observation) -> Optional[float]:
         return None
     delta = o.value - earlier[-1].value
     return round(delta, 3) if delta >= 0 else None
+
+
+def _interpret(th: dict[str, Any], o: Observation, delta: Optional[float]) -> str:
+    """The value against its configured threshold (signatures-1.0.yaml), in words."""
+    v, warn, crit, direction = o.value, th.get("warn"), th.get("critical"), th.get("direction")
+    if v is None:
+        return "missing or malformed; not used"
+    if isinstance(v, bool):
+        return f"{o.metric} check {'passed' if v else 'FAILED'}"
+    if isinstance(v, str):
+        return f"{o.metric} is {v}"
+    if direction == "rising_delta":
+        if delta is None:
+            return "cumulative counter; no per-interval increase (first sample, gap or reset)"
+        if delta >= crit:
+            return f"+{delta:g} in one interval, at or above critical {crit:g}"
+        if delta >= warn:
+            return f"+{delta:g} in one interval, at or above warn {warn:g}"
+        return f"+{delta:g} in one interval, below warn {warn:g}"
+    if direction == "high":
+        if v >= crit:
+            return f"above critical {crit:g} {o.unit}"
+        return f"above warn {warn:g} {o.unit}" if v >= warn else f"normal (below warn {warn:g} {o.unit})"
+    if direction == "low":
+        if v <= crit:
+            return f"at or below critical {crit:g} {o.unit}"
+        return f"at or below warn {warn:g} {o.unit}" if v <= warn else f"normal (above warn {warn:g} {o.unit})"
+    return "context value; not judged against a threshold"
+
+
+def _data_quality(ctx: IncidentContext) -> list[str]:
+    """Readings the normalizer excluded, so a report never hides that part of its input was unusable."""
+    out = []
+    for flag in EXCLUDED_FLAGS:
+        hit = [o for o in ctx.observations if flag in o.quality_flags]
+        if hit:
+            metrics = sorted({o.metric for o in hit})
+            out.append(f"data quality: {len(hit)} {flag} reading(s) excluded from the checks "
+                       f"({', '.join(metrics[:5])}{', ...' if len(metrics) > 5 else ''})")
+    return out
+
+
+def summarize(r: Report) -> str:
+    """One plain-language sentence for the report's outcome (no conclusion beyond the status)."""
+    cause, _, target = (r.suspected_root_cause or "").partition("@")
+    text = f"{CAUSE_TEXT.get(cause, cause)} on {target}"
+    where = f", affecting {', '.join(r.affected_devices)}" if r.affected_devices else ""
+    rejected = (f" {len(r.validation_errors)} input problem(s) were rejected and are listed in validation_errors."
+                if r.validation_errors else "")
+    if r.status == Status.diagnosed:
+        return (f"Diagnosed {text}{where}: {len(r.supporting_evidence)} evidence items from "
+                f"{len({e.source_id for e in r.supporting_evidence})} independent sources agree "
+                f"(confidence {r.confidence}).{rejected}")
+    if r.status == Status.probable:
+        rival = (f"{r.alternative_causes[0]} cannot yet be ruled out" if r.alternative_causes
+                 else "a required check is still missing")
+        return f"Probably {text}{where}, but not confirmed: {rival}. Verify before acting.{rejected}"
+    if r.status == Status.healthy:
+        return f"No fault found: fresh measurements are normal and service/path checks pass.{rejected}"
+    if r.status == Status.insufficient_evidence:
+        return f"No diagnosis: the evidence is not enough to name a cause without guessing.{rejected}"
+    if r.status == Status.invalid_input:
+        return f"Input rejected before analysis: {r.validation_errors[0] if r.validation_errors else 'invalid'}."
+    return f"The run failed: {r.limitations[0] if r.limitations else 'see limitations'}."
 
 
 def _actions(c: Candidate, topo: _Topo) -> list[str]:
@@ -175,6 +263,8 @@ def to_markdown(report: Report) -> str:
     """Human-readable view of the same report (no extra conclusions)."""
     r = report
     lines = [f"# Incident {r.incident_id}: {r.status}", ""]
+    if r.summary:
+        lines += [f"> {r.summary}", ""]
     if r.suspected_root_cause:
         lines.append(f"**Suspected root cause:** `{r.suspected_root_cause}`  ")
     lines.append(f"**Confidence:** {r.confidence if r.confidence is not None else 'n/a'} ({r.confidence_method}, "
@@ -182,8 +272,10 @@ def to_markdown(report: Report) -> str:
     if r.affected_devices or r.affected_segments:
         lines.append(f"**Affected:** {', '.join(r.affected_segments + r.affected_devices)}")
     if r.supporting_evidence:
-        lines += ["", "## Evidence", "", "| ID | metric | value | per interval | source |", "|---|---|---|---|---|"]
-        lines += [f"| {e.evidence_id} | {e.metric} | {e.value} {e.unit} | {_delta_text(e)} | {e.source_id} |"
+        lines += ["", "## Evidence", "", "| ID | metric | value | per interval | meaning | source |",
+                  "|---|---|---|---|---|---|"]
+        lines += [f"| {e.evidence_id} | {e.metric} | {e.value} {e.unit} | {_delta_text(e)} | {e.interpretation or ''} "
+                  f"| {e.source_id} |"
                   for e in r.supporting_evidence]
     for title, items in (("Alternative causes", r.alternative_causes), ("Recommended actions", r.recommended_actions),
                          ("Limitations", r.limitations), ("Validation errors", r.validation_errors),

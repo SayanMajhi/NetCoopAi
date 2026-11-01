@@ -10,11 +10,46 @@ Five specialist agents exchange **validatable evidence** over a versioned protoc
 - Connectivity REST service: [docs/README_track_C.md](docs/README_track_C.md)
 - Demo plan: [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md)
 
-## Setup (3 commands)
+## Setup (Python 3.12)
 ```bash
-python -m venv .venv && .venv\Scripts\activate    # macOS/Linux: source .venv/bin/activate
+python -m venv .venv
+.venv\Scripts\activate          # macOS/Linux: source .venv/bin/activate
 pip install -e ".[dev]"
-pytest -q
+pytest -q                       # 480+ tests
+```
+
+## Judge quickstart (one command)
+```bash
+netcoop demo        # runs all 17 labelled scenarios, prints expected vs got, writes reports/ + traces/
+```
+```
+scenario                     expected                   got                        conf  rejected inputs
+congestion                   diagnosed link_congestion  diagnosed link_congestion  0.95  -                           PASS
+ambiguous_congestion_errors  probable link_congestion   probable link_congestion   0.69  -                           PASS
+unsupported_2_x              insufficient_evidence      insufficient_evidence      0.00  SCHEMA_VERSION_UNSUPPORTED  PASS
+...
+17/17 scenarios match their label
+```
+Then open the dashboard on those real runs (report, one-line summary, every message of the trace incl. QUERY/RESPONSE, competing causes, interpreted evidence):
+```bash
+cd dashboard && npm install && npm run dev
+```
+
+```mermaid
+flowchart LR
+  T[raw telemetry<br/>organizer format] --> N[Normalizer<br/>units, aliases, quality flags]
+  N --> O{{Orchestrator + MessageBus<br/>validates every message,<br/>typed ERRORs}}
+  O -- TASK --> P[Performance agent]
+  O -- TASK --> I[Infrastructure agent]
+  P -- FINDING --> O
+  I -- FINDING --> O
+  O -- "HTTP POST Bundle<br/>(peer findings)" --> C[Connectivity agent<br/>separate REST process]
+  C -- FINDING --> O
+  O --> K[Correlation agent<br/>signatures + heuristic-v1]
+  K -- "QUERY (≤2 rounds)" --> P & I
+  P & I -- RESPONSE --> K
+  K -- DECISION --> R[Reporting agent]
+  R --> J[(report JSON + Markdown<br/>+ JSONL trace)]
 ```
 
 ## Run
@@ -42,7 +77,13 @@ Before deciding, Correlation **verifies** the leading hypothesis (and a close ri
 - Confidence on `correlation_timeout` is `0.0` with method `none: correlation_failed (no heuristic-v1 score could be computed)`: no ranking was possible, and the report says so.
 
 ### How a diagnosis is decided
-Agents nominate hypotheses; the **Correlation agent** re-checks each one against its signature in `netcoop/config/signatures-1.0.yaml`, verifies the leader (and a close rival) with a **QUERY** to the agent that owns the key measurement, and scores it with **`heuristic-v1`** (`netcoop/agents/correlation.py` documents every factor). Gates: `diagnosed` needs confidence ≥ 0.70, coverage ≥ 0.75, two independent raw sources, a 0.15 lead **and no unresolved rival** (a hypothesis the agents raised that the evidence can neither confirm nor refute is listed in `alternative_causes` and blocks a diagnosis); `probable` names what is missing; `healthy` needs normal measurements **and** passing service and path checks; otherwise the system abstains with `insufficient_evidence`. Confidence values are documented heuristics, not calibrated probabilities.
+Agents nominate hypotheses; the **Correlation agent** re-checks each one against its signature in `netcoop/config/signatures-1.0.yaml`, verifies the leader (and a close rival) with a **QUERY** to the agent that owns the key measurement, and scores it with **`heuristic-v1`** (`netcoop/agents/correlation.py` documents every factor). Gates: `diagnosed` needs confidence ≥ 0.70, coverage ≥ 0.75, two independent raw sources, a 0.15 lead **and no unresolved rival** (a hypothesis the agents raised that the evidence can neither confirm nor refute is listed in `alternative_causes` and blocks a diagnosis); `probable` names what is missing; `healthy` needs normal measurements **and** passing service and path checks; otherwise the system abstains with `insufficient_evidence`. Confidence values are documented heuristics, not calibrated probabilities, so the report caps them by status: `diagnosed`/`healthy` at most 0.95 (nothing from one window is certain) and `probable` at most 0.69 (it never outscores a cause that passed the 0.70 gate). The uncapped score stays in the DECISION and the cap is named in `limitations`.
+
+### What every report tells you
+- `summary`: one plain sentence, e.g. *Probably link congestion on DEPT_UPLINK_01, affecting SW_CAMPUS_2, but not confirmed: interface_fault@DEPT_UPLINK_01 cannot yet be ruled out. Verify before acting.*
+- `supporting_evidence[]`: evidence ID, metric, value, unit, raw source, per-interval delta for counters, and `interpretation` against the configured threshold (*above critical 90 percent*).
+- `validation_errors`: every input message the bus rejected, with its typed code and field (`SCHEMA_VERSION_UNSUPPORTED`, `MISSING_FIELD`, `DUPLICATE_MESSAGE`, ...).
+- `limitations`: the time window, the confidence cap, any malformed/missing/stale readings that were excluded, and the before/after ranking of each QUERY round.
 
 ### Held-out evaluation (Phase 4)
 `netcoop eval` generates incidents from `netcoop/evaluation/heldout.py` (committed before any result was looked at; new seeds, times, topology positions and metric mixes; labels come from the fault the generator overlays, never from the system), runs each one, and publishes every ARCHITECTURE §7 metric. Results, with the pre-registered first run, the bug it found and every non-exact case's trace: [`docs/results/PHASE4_RESULTS.md`](docs/results/PHASE4_RESULTS.md).
