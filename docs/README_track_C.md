@@ -146,34 +146,81 @@ $env:NETCOOP_CONNECTIVITY_DB="traces/connectivity.sqlite"; uvicorn connectivity_
 | Endpoint | What it does |
 |---|---|
 | `GET /card` | The agent card (same as `connectivity_agent` in `netcoop/protocol/cards.py`) |
-| `POST /messages` | Receives one `netcoop/1.0` message and replies with one message |
+| `POST /messages` | Receives a **Bundle** and replies with a Bundle (Phase 2, C2) |
 | `GET /events` | The event-log rows as JSON |
 
-`POST /messages` validates the body with **jsonschema against `schemas/message-1.0.json`**, not
-the Python models, so the generated wire contract is what is enforced. The JSON Schema is
-language-neutral, so a non-Python agent could be validated the same way.
+A Bundle (`schemas/bundle-1.0.json`) is `{"messages": [...], "observations": [...], "topology": {...}}`.
+`messages[0]` is the TASK addressed to `connectivity_agent`; the rest are the peer FINDINGs
+it may use. The service validates with **jsonschema** (format checker on): the Bundle against
+`schemas/bundle-1.0.json` and each message against `schemas/message-1.0.json`, not the Python
+models, so the generated wire contract is what is enforced.
 
-| Request | HTTP | Reply |
+| Request | HTTP | Reply Bundle holds |
 |---|---|---|
-| Valid message | 200 | `RESPONSE` with `in_reply_to` = the received `message_id`, addressed to the sender |
+| Valid Bundle | 200 | `RESPONSE` to the TASK (`in_reply_to` = TASK ID, addressed to its sender) |
 | Not JSON / not an object | 400 | `ERROR` `MALFORMED_JSON` |
-| Missing field | 400 | `ERROR` `MISSING_FIELD` + `field_path` |
-| Wrong type or enum value | 400 | `ERROR` `INVALID_VALUE` + `field_path` |
-| `netcoop/2.x` | 400 | `ERROR` `SCHEMA_VERSION_UNSUPPORTED` |
-| Repeated `message_id` | 409 | `ERROR` `DUPLICATE_MESSAGE`; ignored and logged |
+| No `messages` (e.g. a bare envelope) / empty list | 400 | `ERROR` `MISSING_FIELD` / `INVALID_VALUE`, `field_path` `messages` |
+| Bad observation / unknown top-level field | 400 | `ERROR` `INVALID_VALUE` + `field_path` (e.g. `observations.0.observed_at`) |
+| Bad TASK (missing field, bad value, `2.x`) | 400 | typed `ERROR`, `field_path` like `messages.0.sender` |
+| `messages[0]` not a TASK / TASK for another agent | 400 | `ERROR` `INVALID_VALUE` / `UNKNOWN_RECIPIENT` |
+| Bad or `2.x` peer message | 200 | `RESPONSE` to the TASK **plus** an `ERROR` for that peer (`messages.N...`); the peer is dropped |
+| Same `message_id` twice in one Bundle | 200 | `ERROR` `DUPLICATE_MESSAGE` for the repeat; ignored and logged |
 
-Unknown top-level fields from a `1.x` sender are moved into `extra`, as the protocol requires.
-Outgoing RESPONSE and ERROR messages are validated against the same schema before they are sent.
+Every message in the Bundle gets its own event-log row. Unknown top-level fields on a `1.x`
+message are moved into `extra`. Outgoing messages are validated against the schema before they
+are sent; the RESPONSE carries the TASK's timestamp (the incident clock) so runs are reproducible.
 
-Example:
+**Each Bundle is one delivery.** Message IDs are deterministic per fixture, so a re-run (or the
+`--control` run, which reuses the TASK ID) sends the same IDs again. Duplicates are therefore
+detected inside a Bundle, and reply IDs restart at `CONN-01` for every request.
+
+Example (from the repo root; `curl.exe` in PowerShell):
 
 ```bash
-curl -i -H "Content-Type: application/json" --data @docs/m1_curl/valid_finding.json localhost:8001/messages
+curl -i -H "Content-Type: application/json" --data @docs/m2_curl/bundle.json localhost:8001/messages
 ```
 
-**Current limit:** the RESPONSE is a stub. Its `answer` says "connectivity analysis not
-implemented yet" and `evidence_ids` is empty. Real topology, DNS/DHCP, reachability and
-peer-finding analysis is Part 2 work.
+Its peer FINDING **supports** `link_congestion@HOSTEL_UPLINK_01`, so the reply is `upstream_dependency@HOSTEL_UPLINK_01` with `consumed_message_ids: ["INC-0001-INF-02"]`.
+`docs/m2_curl/bundle_bad_peer.json` is the same Bundle with `stance` removed from the peer FINDING: HTTP 200, a RESPONSE for the TASK and an ERROR `MISSING_FIELD` at `messages.1.payload.stance`.
+The Phase 1 proof (`docs/m1_curl/`) used single messages and no longer matches the endpoint.
+
+### Connectivity reasoning — `connectivity_service/logic.py` (C3)
+
+`handle_bundle(messages, observations, topology)` is the agent (`connectivity_agent`, IDs `CONN`).
+It reads the topology as a tree (each link runs from `a`, towards the core, to `b`) and never
+needs thresholds: the checks it owns are booleans. Missing, stale or malformed checks are unknown.
+
+| Evidence | Finding |
+|---|---|
+| `dns_success` / `dhcp_success` false on clients, server (`services` in topology) reachable | `dns_failure` / `dhcp_failure@SRV_DNS_DHCP_01` supports (0.8 for ≥ 2 clients and server known reachable, else 0.6) |
+| Same, but the server itself is unreachable | `upstream_dependency@SRV_LINK_01` **contradicts** `dns_failure` / `dhcp_failure` |
+| Every client's check succeeds | `healthy@SRV_DNS_DHCP_01` **contradicts** `dns_failure` / `dhcp_failure` |
+| Devices unreachable, all behind one link | `upstream_dependency@<link>` (or `@<switch>` when the switch just below still answers), with the blast radius |
+| **Peer FINDINGs** naming faults on topology elements (a `supports` finding, or a `contradicts` finding that offers a different hypothesis; "X contradicts X" only means "not X" and is ignored, see PROTOCOL.md "Reading stance") | `upstream_dependency@<deepest link they all share>` with blast radius and `consumed_message_ids`; 0.7 if two agents agree, 0.5 if one, 0.4 per link when the faults share no upstream |
+| No peer faults, every own check passes | `healthy@<common upstream of the TASK scope>` |
+| No checks of its own and no usable peers | a `RESPONSE` saying it cannot judge |
+
+So the peers change the conclusion: on congestion the normal run says
+`upstream_dependency@HOSTEL_UPLINK_01` (consuming the Performance/Infrastructure findings), the
+`--control` run, with no peers, can only say `healthy@<common upstream of the TASK scope>` (`CORE_RTR_01` for a campus-wide scope). Peer evidence IDs that are not in the Bundle are
+never cited. If the analysis crashes, the service answers HTTP 500 with a typed `AGENT_FAILURE` ERROR.
+
+### Remote client — `netcoop/orchestrator/remote.py` (C4)
+
+`send_bundle(bundle, endpoint, *, timeout=5.0, retries=1)` is how the orchestrator reaches the
+Connectivity process (`netcoop run` without `--local`; `--endpoint` overrides the card's
+`http://127.0.0.1:8001`). It posts the Bundle to `<endpoint>/messages` with `httpx` and returns a
+`ConnectivityReply`: the raw reply messages (the bus validates each one), the raw request and
+response bodies for `traces/<incident>.jsonl`, and the HTTP status. It **never raises**.
+
+| What happens | Retried? | `error` |
+|---|---|---|
+| 2xx Bundle | — | `None` |
+| Connection refused / timeout | once | `AGENT_TIMEOUT: connectivity_unreachable: ...` → report limitation, status `insufficient_evidence` |
+| 502 / 503 / 504 | once | as the final reply |
+| 4xx / 500 with an ERROR Bundle | no (the agent's typed answer) | `AGENT_FAILURE: HTTP <n>: <code>: <detail>`; the ERRORs still go through the bus |
+| Not JSON / not a Bundle | no | `AGENT_FAILURE: HTTP <n>: ...`; the raw body is kept for the trace |
+| Anything unexpected | no | `AGENT_FAILURE: <exception>` |
 
 ## Tests
 
@@ -181,7 +228,9 @@ peer-finding analysis is Part 2 work.
 |---|---|---|
 | `tests/test_topology.py` | 8 | Topology integrity, shared upstream, generator IDs, one uplink per switch |
 | `tests/test_bus.py` | 13 | Valid, duplicate and invalid messages all logged; v2 unsupported; missing protocol; 1.x unknown fields; malformed JSON; payload field paths; resend after fix; file-backed log |
-| `tests/test_connectivity_service.py` | 11 | Card; valid → RESPONSE; missing field → typed ERROR; v2 unsupported; bad enum; malformed JSON; duplicate → 409; QUERY echoes `query_id`; 1.x extra fields; the 3 acceptance rows |
+| `tests/test_connectivity_service.py` | 22 | Card; Bundle in/out; reply uses incident clock and repeats identically; bare envelope, empty messages, bad observation, unknown field rejected; TASK checks (missing field, not a TASK, wrong recipient, bad timestamp, v2); bad/v2/duplicate peers dropped with ERROR while the TASK is answered; 1.x extra fields; every message logged; analysis crash → `AGENT_FAILURE` |
+| `tests/test_connectivity_logic.py` | 17 | Topology upstream/blast radius; peers localise to the shared uplink and are consumed; control run differs; independent faults; contradicting/healthy/unknown peers; DNS/DHCP failure and server unreachable; unreachable devices; missing ≠ failure; determinism; real pipeline normal vs control |
+| `tests/test_remote.py` | 15 | Real service round trip keeps both bodies; refused/timeout retried once then `AGENT_TIMEOUT` (`connectivity_unreachable`); retry recovers; 503 retried, 400/500 not; non-JSON and non-Bundle replies; never raises; pipeline over HTTP traces bodies and control differs; unreachable agent → `insufficient_evidence` |
 
 ```bash
 pytest -q
