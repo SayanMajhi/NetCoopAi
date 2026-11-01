@@ -91,7 +91,7 @@ signatures:
           - {metric: interface_oper_status, check: down_or_flapping}
           - {metric: reachability, check: unreachable}
     corroborating:
-      min_matches: 1
+      min_matches: 0
       checks:
         - {metric: packet_loss_pct, check: above_critical}
         - {metric: interface_errors, check: rising_delta}

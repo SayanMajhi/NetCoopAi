@@ -14,6 +14,9 @@ What it may claim (Phase 2 review, R1/R2):
   that radius look (a supports finding on the peer's hypothesis).
 - `upstream_dependency@L` only when >= 2 distinct fault targets share link L and L is
   not itself one of them (a genuinely different explanation).
+- `hardware_failure@N` for the topmost silent point of an outage: N's whole subtree failed
+  every reachability check in the window while a device beside N (same parent) still
+  answers, so the path to N is up and N (or its uplink) is the suspect.
 - Health only for what it measured: `healthy@<link> contradicts upstream_dependency@<link>`
   when every device behind the link answered, and never when any observation in the
   Bundle is missing or stale. It never claims a whole campus or zone is healthy.
@@ -171,6 +174,7 @@ class ConnectivityAgent(BaseAgent):
 
         out = self._services(ctx, task, topo, reach)
         out += self._shared_upstream(ctx, task, topo, reach, faults)
+        out += self._down_devices(ctx, task, topo, reach)
         out += self._scope(ctx, task, topo, faults, notes)
         out += self._wifi_uplinks(ctx, task, topo, reach, faults, notes)
         out += self._path_health(ctx, task, topo, reach, faults, {m.payload["hypothesis"] for m in out})
@@ -274,6 +278,49 @@ class ConnectivityAgent(BaseAgent):
                    + (f"; {head} just below it still answers" if where == head else "")
                    + f"; blast radius {len(radius)} device(s): {', '.join(radius)}; "
                      f"{sum(1 for d in down if d in radius)} unreachable in own checks")]
+
+    def _down_devices(self, ctx: IncidentContext, task: Envelope, topo: Topology,
+                      reach: dict[str, Observation]) -> list[Envelope]:
+        """The topmost silent point of each outage: walk up from every device that failed all its
+        reachability checks to the highest node whose whole subtree is silent, while a device beside it
+        (same parent) still answers, so the path to it is up and that node is the suspect."""
+        def silent(device: str) -> bool:
+            samples = self._checks(ctx, device)
+            return bool(samples) and not any(as_bool(o) for o in samples)
+
+        def answers(device: str) -> bool:
+            return device in reach and as_bool(reach[device]) is True
+
+        suspects: dict[str, list[str]] = {}
+        for device in sorted(d for d in reach if d in topo.nodes and silent(d)):
+            node = device
+            while node in topo.parent_link:
+                parent = topo.links[topo.parent_link[node]]["a"]
+                below = topo.radius(parent)
+                if answers(parent) or any(answers(d) for d in below):
+                    break                      # something under the parent still answers: stop at `node`
+                node = parent
+            beside = [d for d in topo.radius(topo.links[topo.parent_link[node]]["a"]) if d not in topo.radius(node)]                 if node in topo.parent_link else []
+            if not any(answers(d) for d in beside):
+                continue                       # nothing nearby answers: a dead path, not a dead device
+            suspects.setdefault(node, []).append(device)
+        out: list[Envelope] = []
+        for node, silent_devices in sorted(suspects.items()):
+            evidence = [o.evidence_id for d in silent_devices for o in self._checks(ctx, d)]
+            uplink = topo.parent_link.get(node)
+            where = f"{node} itself" + (f" or its uplink {uplink}" if uplink else "")
+            out.append(self._emit(
+                ctx, task, hypothesis=f"hardware_failure@{node}", stance=Stance.supports,
+                evidence_ids=evidence, score=0.6,
+                reason=f"{', '.join(silent_devices)} failed every reachability check in the window while other "
+                       f"devices under the same parent still answer; the path to {node} is up, so {where} "
+                       f"(power, hardware or port) is the suspect"))
+        return out
+
+    @staticmethod
+    def _checks(ctx: IncidentContext, device: str) -> list[Observation]:
+        return [o for o in ctx.for_target(device, "reachability")
+                if not UNUSABLE.intersection(o.quality_flags) and as_bool(o) is not None]
 
     def _scope(self, ctx: IncidentContext, task: Envelope, topo: Topology,
                faults: list[tuple[Envelope, str]], notes: list[str]) -> list[Envelope]:
