@@ -31,7 +31,10 @@ netcoop run data/generator_raw/hardware_failure_unseeded.json   # untouched orga
 netcoop export-schemas                    # regenerate schemas/ + PROTOCOL.md after editing models.py
 python scenarios/build_dev_fixtures.py    # rebuild the 17 labelled scenarios in scenarios/dev/
 ```
-Until Phase 3 adds correlation, every report ends in `insufficient_evidence` and lists the agents' findings; the trace shows each agent's evidence and Connectivity's use of its peers. Coming next: a named cause with `heuristic-v1` confidence (Phase 3) and `netcoop eval` (Phase 4).
+Each run writes `reports/<incident>.json` (the report-1.0 diagnosis), `reports/<incident>.md` (the same report for humans) and `traces/<incident>.jsonl` (every message, including the QUERY/RESPONSE rounds and the HTTP bodies to and from Connectivity). Statuses: `diagnosed`, `probable`, `healthy`, `insufficient_evidence`, `invalid_input`, `failed`. Coming next: `netcoop eval` on held-out scenarios (Phase 4).
+
+### How a diagnosis is decided
+Agents nominate hypotheses; the **Correlation agent** re-checks each one against its signature in `netcoop/config/signatures-1.0.yaml`, verifies the leader (and a close rival) with a **QUERY** to the agent that owns the key measurement, and scores it with **`heuristic-v1`** (`netcoop/agents/correlation.py` documents every factor). Gates: `diagnosed` needs confidence ≥ 0.70, coverage ≥ 0.75, two independent raw sources and a 0.15 lead; `probable` names what is missing; `healthy` needs normal measurements **and** passing service and path checks; otherwise the system abstains with `insufficient_evidence`. Confidence values are documented heuristics, not calibrated probabilities.
 
 ## How it works
 | Component | Role |

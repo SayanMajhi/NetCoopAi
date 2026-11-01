@@ -51,7 +51,7 @@
   {
    "timestamp": "2026-11-01T10:00:30Z",
    "device_id": "SRV_DNS_DHCP_01",
-   "source_id": "client-probe",
+   "source_id": "icmp-monitor",
    "metrics": {
     "reachability": true
    }
@@ -59,7 +59,7 @@
   {
    "timestamp": "2026-11-01T10:01:30Z",
    "device_id": "SRV_DNS_DHCP_01",
-   "source_id": "client-probe",
+   "source_id": "icmp-monitor",
    "metrics": {
     "reachability": true
    }
@@ -67,7 +67,7 @@
   {
    "timestamp": "2026-11-01T10:02:30Z",
    "device_id": "SRV_DNS_DHCP_01",
-   "source_id": "client-probe",
+   "source_id": "icmp-monitor",
    "metrics": {
     "reachability": true
    }
@@ -75,7 +75,7 @@
   {
    "timestamp": "2026-11-01T10:03:30Z",
    "device_id": "SRV_DNS_DHCP_01",
-   "source_id": "client-probe",
+   "source_id": "icmp-monitor",
    "metrics": {
     "reachability": true
    }
@@ -83,7 +83,7 @@
   {
    "timestamp": "2026-11-01T10:04:30Z",
    "device_id": "SRV_DNS_DHCP_01",
-   "source_id": "client-probe",
+   "source_id": "icmp-monitor",
    "metrics": {
     "reachability": true
    }
@@ -145,8 +145,7 @@
    "metrics": {
     "dns_success": true,
     "latency_ms": 9.7,
-    "packet_loss_pct": 0.0,
-    "reachability": true
+    "packet_loss_pct": 0.0
    }
   },
   {
@@ -156,8 +155,7 @@
    "metrics": {
     "dns_success": true,
     "latency_ms": 11.0,
-    "packet_loss_pct": 0.0,
-    "reachability": true
+    "packet_loss_pct": 0.0
    }
   },
   {
@@ -167,8 +165,7 @@
    "metrics": {
     "dns_success": true,
     "latency_ms": 8.3,
-    "packet_loss_pct": 0.0,
-    "reachability": true
+    "packet_loss_pct": 0.0
    }
   },
   {
@@ -178,8 +175,7 @@
    "metrics": {
     "dns_success": true,
     "latency_ms": 9.5,
-    "packet_loss_pct": 0.0,
-    "reachability": true
+    "packet_loss_pct": 0.0
    }
   },
   {
@@ -189,7 +185,46 @@
    "metrics": {
     "dns_success": true,
     "latency_ms": 7.9,
-    "packet_loss_pct": 0.0,
+    "packet_loss_pct": 0.0
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:00:30Z",
+   "device_id": "SW_CAMPUS_10",
+   "source_id": "icmp-monitor",
+   "metrics": {
+    "reachability": true
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:01:30Z",
+   "device_id": "SW_CAMPUS_10",
+   "source_id": "icmp-monitor",
+   "metrics": {
+    "reachability": true
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:02:30Z",
+   "device_id": "SW_CAMPUS_10",
+   "source_id": "icmp-monitor",
+   "metrics": {
+    "reachability": true
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:03:30Z",
+   "device_id": "SW_CAMPUS_10",
+   "source_id": "icmp-monitor",
+   "metrics": {
+    "reachability": true
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:04:30Z",
+   "device_id": "SW_CAMPUS_10",
+   "source_id": "icmp-monitor",
+   "metrics": {
     "reachability": true
    }
   },
@@ -252,8 +287,7 @@
     "dns_success": true,
     "jitter_ms": 2.3,
     "latency_ms": 10.7,
-    "packet_loss_pct": 0.0,
-    "reachability": true
+    "packet_loss_pct": 0.0
    }
   },
   {
@@ -265,8 +299,7 @@
     "dns_success": true,
     "jitter_ms": 2.8,
     "latency_ms": 11.1,
-    "packet_loss_pct": 0.0,
-    "reachability": true
+    "packet_loss_pct": 0.0
    }
   },
   {
@@ -278,8 +311,7 @@
     "dns_success": true,
     "jitter_ms": 2.7,
     "latency_ms": 9.5,
-    "packet_loss_pct": 0.0,
-    "reachability": true
+    "packet_loss_pct": 0.0
    }
   },
   {
@@ -291,8 +323,7 @@
     "dns_success": true,
     "jitter_ms": 2.3,
     "latency_ms": 10.5,
-    "packet_loss_pct": 0.0,
-    "reachability": true
+    "packet_loss_pct": 0.0
    }
   },
   {
@@ -304,7 +335,46 @@
     "dns_success": true,
     "jitter_ms": 1.9,
     "latency_ms": 9.5,
-    "packet_loss_pct": 0.0,
+    "packet_loss_pct": 0.0
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:00:30Z",
+   "device_id": "SW_CAMPUS_3",
+   "source_id": "icmp-monitor",
+   "metrics": {
+    "reachability": true
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:01:30Z",
+   "device_id": "SW_CAMPUS_3",
+   "source_id": "icmp-monitor",
+   "metrics": {
+    "reachability": true
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:02:30Z",
+   "device_id": "SW_CAMPUS_3",
+   "source_id": "icmp-monitor",
+   "metrics": {
+    "reachability": true
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:03:30Z",
+   "device_id": "SW_CAMPUS_3",
+   "source_id": "icmp-monitor",
+   "metrics": {
+    "reachability": true
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:04:30Z",
+   "device_id": "SW_CAMPUS_3",
+   "source_id": "icmp-monitor",
+   "metrics": {
     "reachability": true
    }
   },
@@ -314,8 +384,7 @@
    "source_id": "client-probe",
    "metrics": {
     "dhcp_success": true,
-    "dns_success": true,
-    "reachability": true
+    "dns_success": true
    }
   },
   {
@@ -324,8 +393,7 @@
    "source_id": "client-probe",
    "metrics": {
     "dhcp_success": true,
-    "dns_success": true,
-    "reachability": true
+    "dns_success": true
    }
   },
   {
@@ -334,8 +402,7 @@
    "source_id": "client-probe",
    "metrics": {
     "dhcp_success": true,
-    "dns_success": true,
-    "reachability": true
+    "dns_success": true
    }
   },
   {
@@ -344,8 +411,7 @@
    "source_id": "client-probe",
    "metrics": {
     "dhcp_success": true,
-    "dns_success": true,
-    "reachability": true
+    "dns_success": true
    }
   },
   {
@@ -354,14 +420,53 @@
    "source_id": "client-probe",
    "metrics": {
     "dhcp_success": true,
-    "dns_success": true,
+    "dns_success": true
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:00:30Z",
+   "device_id": "SW_CAMPUS_4",
+   "source_id": "icmp-monitor",
+   "metrics": {
+    "reachability": true
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:01:30Z",
+   "device_id": "SW_CAMPUS_4",
+   "source_id": "icmp-monitor",
+   "metrics": {
+    "reachability": true
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:02:30Z",
+   "device_id": "SW_CAMPUS_4",
+   "source_id": "icmp-monitor",
+   "metrics": {
+    "reachability": true
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:03:30Z",
+   "device_id": "SW_CAMPUS_4",
+   "source_id": "icmp-monitor",
+   "metrics": {
+    "reachability": true
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:04:30Z",
+   "device_id": "SW_CAMPUS_4",
+   "source_id": "icmp-monitor",
+   "metrics": {
     "reachability": true
    }
   },
   {
    "timestamp": "2026-11-01T10:00:30Z",
    "device_id": "SW_CAMPUS_5",
-   "source_id": "client-probe",
+   "source_id": "icmp-monitor",
    "metrics": {
     "reachability": true
    }
@@ -369,7 +474,7 @@
   {
    "timestamp": "2026-11-01T10:01:30Z",
    "device_id": "SW_CAMPUS_5",
-   "source_id": "client-probe",
+   "source_id": "icmp-monitor",
    "metrics": {
     "reachability": true
    }
@@ -377,7 +482,7 @@
   {
    "timestamp": "2026-11-01T10:02:30Z",
    "device_id": "SW_CAMPUS_5",
-   "source_id": "client-probe",
+   "source_id": "icmp-monitor",
    "metrics": {
     "reachability": true
    }
@@ -385,7 +490,7 @@
   {
    "timestamp": "2026-11-01T10:03:30Z",
    "device_id": "SW_CAMPUS_5",
-   "source_id": "client-probe",
+   "source_id": "icmp-monitor",
    "metrics": {
     "reachability": true
    }
@@ -393,7 +498,7 @@
   {
    "timestamp": "2026-11-01T10:04:30Z",
    "device_id": "SW_CAMPUS_5",
-   "source_id": "client-probe",
+   "source_id": "icmp-monitor",
    "metrics": {
     "reachability": true
    }
@@ -401,7 +506,7 @@
   {
    "timestamp": "2026-11-01T10:00:30Z",
    "device_id": "SW_CAMPUS_6",
-   "source_id": "client-probe",
+   "source_id": "icmp-monitor",
    "metrics": {
     "reachability": true
    }
@@ -409,7 +514,7 @@
   {
    "timestamp": "2026-11-01T10:01:30Z",
    "device_id": "SW_CAMPUS_6",
-   "source_id": "client-probe",
+   "source_id": "icmp-monitor",
    "metrics": {
     "reachability": true
    }
@@ -417,7 +522,7 @@
   {
    "timestamp": "2026-11-01T10:02:30Z",
    "device_id": "SW_CAMPUS_6",
-   "source_id": "client-probe",
+   "source_id": "icmp-monitor",
    "metrics": {
     "reachability": true
    }
@@ -425,7 +530,7 @@
   {
    "timestamp": "2026-11-01T10:03:30Z",
    "device_id": "SW_CAMPUS_6",
-   "source_id": "client-probe",
+   "source_id": "icmp-monitor",
    "metrics": {
     "reachability": true
    }
@@ -433,7 +538,7 @@
   {
    "timestamp": "2026-11-01T10:04:30Z",
    "device_id": "SW_CAMPUS_6",
-   "source_id": "client-probe",
+   "source_id": "icmp-monitor",
    "metrics": {
     "reachability": true
    }
@@ -441,7 +546,7 @@
   {
    "timestamp": "2026-11-01T10:00:30Z",
    "device_id": "SW_CAMPUS_7",
-   "source_id": "client-probe",
+   "source_id": "icmp-monitor",
    "metrics": {
     "reachability": true
    }
@@ -449,7 +554,7 @@
   {
    "timestamp": "2026-11-01T10:01:30Z",
    "device_id": "SW_CAMPUS_7",
-   "source_id": "client-probe",
+   "source_id": "icmp-monitor",
    "metrics": {
     "reachability": true
    }
@@ -457,7 +562,7 @@
   {
    "timestamp": "2026-11-01T10:02:30Z",
    "device_id": "SW_CAMPUS_7",
-   "source_id": "client-probe",
+   "source_id": "icmp-monitor",
    "metrics": {
     "reachability": true
    }
@@ -465,7 +570,7 @@
   {
    "timestamp": "2026-11-01T10:03:30Z",
    "device_id": "SW_CAMPUS_7",
-   "source_id": "client-probe",
+   "source_id": "icmp-monitor",
    "metrics": {
     "reachability": true
    }
@@ -473,7 +578,7 @@
   {
    "timestamp": "2026-11-01T10:04:30Z",
    "device_id": "SW_CAMPUS_7",
-   "source_id": "client-probe",
+   "source_id": "icmp-monitor",
    "metrics": {
     "reachability": true
    }
@@ -487,8 +592,7 @@
     "dns_success": true,
     "jitter_ms": 1.8,
     "latency_ms": 13.6,
-    "packet_loss_pct": 0.0,
-    "reachability": true
+    "packet_loss_pct": 0.0
    }
   },
   {
@@ -500,8 +604,7 @@
     "dns_success": true,
     "jitter_ms": 2.5,
     "latency_ms": 9.6,
-    "packet_loss_pct": 0.0,
-    "reachability": true
+    "packet_loss_pct": 0.0
    }
   },
   {
@@ -513,8 +616,7 @@
     "dns_success": true,
     "jitter_ms": 2.2,
     "latency_ms": 11.0,
-    "packet_loss_pct": 0.0,
-    "reachability": true
+    "packet_loss_pct": 0.0
    }
   },
   {
@@ -526,8 +628,7 @@
     "dns_success": true,
     "jitter_ms": 2.8,
     "latency_ms": 12.9,
-    "packet_loss_pct": 0.0,
-    "reachability": true
+    "packet_loss_pct": 0.0
    }
   },
   {
@@ -539,7 +640,46 @@
     "dns_success": true,
     "jitter_ms": 2.2,
     "latency_ms": 11.5,
-    "packet_loss_pct": 0.0,
+    "packet_loss_pct": 0.0
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:00:30Z",
+   "device_id": "SW_CAMPUS_8",
+   "source_id": "icmp-monitor",
+   "metrics": {
+    "reachability": true
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:01:30Z",
+   "device_id": "SW_CAMPUS_8",
+   "source_id": "icmp-monitor",
+   "metrics": {
+    "reachability": true
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:02:30Z",
+   "device_id": "SW_CAMPUS_8",
+   "source_id": "icmp-monitor",
+   "metrics": {
+    "reachability": true
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:03:30Z",
+   "device_id": "SW_CAMPUS_8",
+   "source_id": "icmp-monitor",
+   "metrics": {
+    "reachability": true
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:04:30Z",
+   "device_id": "SW_CAMPUS_8",
+   "source_id": "icmp-monitor",
+   "metrics": {
     "reachability": true
    }
   },
@@ -549,8 +689,7 @@
    "source_id": "client-probe",
    "metrics": {
     "dhcp_success": true,
-    "dns_success": true,
-    "reachability": true
+    "dns_success": true
    }
   },
   {
@@ -559,8 +698,7 @@
    "source_id": "client-probe",
    "metrics": {
     "dhcp_success": true,
-    "dns_success": true,
-    "reachability": true
+    "dns_success": true
    }
   },
   {
@@ -569,8 +707,7 @@
    "source_id": "client-probe",
    "metrics": {
     "dhcp_success": true,
-    "dns_success": true,
-    "reachability": true
+    "dns_success": true
    }
   },
   {
@@ -579,8 +716,7 @@
    "source_id": "client-probe",
    "metrics": {
     "dhcp_success": true,
-    "dns_success": true,
-    "reachability": true
+    "dns_success": true
    }
   },
   {
@@ -589,7 +725,46 @@
    "source_id": "client-probe",
    "metrics": {
     "dhcp_success": true,
-    "dns_success": true,
+    "dns_success": true
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:00:30Z",
+   "device_id": "SW_CAMPUS_9",
+   "source_id": "icmp-monitor",
+   "metrics": {
+    "reachability": true
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:01:30Z",
+   "device_id": "SW_CAMPUS_9",
+   "source_id": "icmp-monitor",
+   "metrics": {
+    "reachability": true
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:02:30Z",
+   "device_id": "SW_CAMPUS_9",
+   "source_id": "icmp-monitor",
+   "metrics": {
+    "reachability": true
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:03:30Z",
+   "device_id": "SW_CAMPUS_9",
+   "source_id": "icmp-monitor",
+   "metrics": {
+    "reachability": true
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:04:30Z",
+   "device_id": "SW_CAMPUS_9",
+   "source_id": "icmp-monitor",
+   "metrics": {
     "reachability": true
    }
   },

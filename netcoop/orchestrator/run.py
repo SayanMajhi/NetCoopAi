@@ -20,6 +20,8 @@ from typing import Any, Callable, Optional
 import yaml
 
 from netcoop.agents.base import BaseAgent, IncidentContext
+from netcoop.agents.correlation import CorrelationAgent
+from netcoop.agents.reporting import ReportingAgent, to_markdown
 from netcoop.normalizer.result import NormalizationResult
 from netcoop.orchestrator.bus import MessageBus
 from netcoop.orchestrator.eventlog import EventLog
@@ -126,15 +128,26 @@ class _Run:
         self.findings: list[Envelope] = []
         self.limitations: list[str] = []
         self.wire: list[dict[str, Any]] = []
+        self.conversions: list[str] = []
+        self.known_evidence: Optional[set[str]] = None
 
     def deliver(self, raw: Any) -> Optional[Envelope]:
-        """Every message goes through the bus; rejects are kept as typed ERRORs."""
+        """Every message goes through the bus; rejects are kept as typed ERRORs. A FINDING
+        citing evidence that is not in this incident is rejected with UNKNOWN_EVIDENCE."""
         accepted, error = self.bus.deliver(raw)
         if error is not None:
             self.messages.append(error)
             return None
         self.messages.append(accepted)
+        for record in self.bus.conversions.pop(accepted.message_id, []):
+            self.conversions.append(f"{accepted.message_id}: {record}")
         if accepted.type == MessageType.FINDING.value:
+            unknown = sorted(set(accepted.payload["evidence_ids"]) - (self.known_evidence or set()))
+            if self.known_evidence is not None and unknown:
+                self.failure(accepted.sender, accepted.message_id, ErrorCode.UNKNOWN_EVIDENCE,
+                             f"FINDING {accepted.payload['finding_id']} cites evidence not in this incident: {unknown}; "
+                             "excluded from correlation")
+                return None
             self.findings.append(accepted)
         return accepted
 
@@ -199,6 +212,7 @@ def run_incident(fixture: Any, topology: dict[str, Any], signatures: dict[str, A
     ctx = IncidentContext(incident_id=incident_id, clock=clock, observations=norm.observations,
                           topology=topology, signatures=signatures, normalization_log=norm.normalization_log)
     run = _Run(incident_id, clock)
+    run.known_evidence = {o.evidence_id for o in norm.observations}
     run.limitations.extend(comps.unavailable)
     run.limitations.extend(_sparse_telemetry(norm, signatures))
     orch = _Orchestrator()
@@ -237,10 +251,51 @@ def run_incident(fixture: Any, topology: dict[str, Any], signatures: dict[str, A
         for raw in reply.messages:
             run.deliver(raw)
 
-    # 3. Phase 3 replaces this with Correlation (ranking, QUERY rounds, gates) and Reporting.
-    run.limitations.append("correlation not implemented (Phase 3): no cause is named yet")
-    report = _report(run, version, norm.normalization_log)
+    # 3. Correlation ranks the signatures, verifies with QUERY (<= 2 rounds) and decides; one retry.
+    simulate = (fixture.get("inject") or {}).get("correlation") if isinstance(fixture.get("inject"), dict) else None
+    info: Optional[dict[str, Any]] = None
+    for attempt in (1, 2):
+        try:
+            info = _correlate(run, ctx, comps, simulate)
+            break
+        except TimeoutError as exc:
+            failure = (ErrorCode.AGENT_TIMEOUT, f"attempt {attempt}: {exc}")
+        except Exception as exc:  # a correlation bug must still end in a report
+            failure = (ErrorCode.AGENT_FAILURE, f"attempt {attempt}: {type(exc).__name__}: {exc}")
+    log = norm.normalization_log + [f"protocol upgrade {c}" for c in run.conversions]
+    if info is None:
+        run.failure(CORRELATION, None, failure[0], failure[1] + " (gave up after one retry)")
+        run.limitations.append("correlation_failed: no ranking or decision; the findings below are unweighed")
+        report = _fallback(run, version, log)
+    else:
+        ctx.normalization_log = log
+        report = ReportingAgent().build(ctx, info, run.findings, version, run.limitations, [])
     return RunResult(report=report, messages=run.messages, wire=run.wire, findings=run.findings)
+
+
+def _correlate(run: _Run, ctx: IncidentContext, comps: Components, simulate: Optional[str]) -> dict[str, Any]:
+    """Rank, run the QUERY rounds through the bus, and deliver the DECISION."""
+    if simulate == "timeout":           # test hook from scenarios/dev/correlation_timeout.json
+        raise TimeoutError("correlation_agent did not answer within its deadline (simulated)")
+    corr = CorrelationAgent()
+    corr.rank(ctx, run.findings)
+    while True:
+        queries = corr.plan_queries(ctx)
+        if not queries:
+            break
+        for query in queries:
+            if run.deliver(query.model_dump(mode="json")) is None:
+                continue
+            agent = comps.agents.get(query.recipient)
+            if agent is None:
+                run.limitations.append(f"QUERY {query.payload['query_id']}: {query.recipient} unavailable")
+                continue
+            response = run.deliver(agent.answer(query, ctx).model_dump(mode="json"))
+            if response is not None:
+                corr.absorb(response, ctx, run.findings)
+    decision, info = corr.decide(ctx, None)
+    run.deliver(decision.model_dump(mode="json"))
+    return info
 
 
 def _sparse_telemetry(norm: NormalizationResult, signatures: dict[str, Any]) -> list[str]:
@@ -266,12 +321,15 @@ def _task(orch: _Orchestrator, ctx: IncidentContext, recipient: str, capability:
     return orch.make(ctx, recipient, MessageType.TASK, payload.model_dump(mode="json"), None)
 
 
-def _report(run: _Run, version: str, normalization_log: list[str]) -> Report:
+def _fallback(run: _Run, version: str, normalization_log: list[str]) -> Report:
+    """Report when Correlation failed twice (ARCHITECTURE §4 step 5): insufficient_evidence."""
     finding_ids = sorted(f.payload["finding_id"] for f in run.findings)
     sources = sorted({f.sender for f in run.findings})
     return Report(
         incident_id=run.incident_id, status=Status.insufficient_evidence, suspected_root_cause=None,
-        confidence=0.0, confidence_method="not computed (Phase 2)", signature_version=version,
+        confidence=0.0, confidence_method="none: correlation_failed (no heuristic-v1 score could be computed)",
+        signature_version=version, recommended_actions=["Re-run the diagnosis once the correlation service is healthy",
+                                                        "Review the listed agent findings manually meanwhile"],
         agent_findings=finding_ids, evidence_sources=sources, limitations=run.limitations,
         normalization_log=normalization_log, agent_trace_id=f"{run.incident_id}-TRACE",
     )
@@ -328,4 +386,5 @@ def write_outputs(result: RunResult, out_dir: Path, trace_dir: Path, control: bo
     lines = [json.dumps({"kind": "message", **m.model_dump(mode="json")}) for m in result.messages]
     lines += [json.dumps({"kind": "wire", **w}) for w in result.wire]
     trace_path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8", newline="\n")
+    report_path.with_suffix(".md").write_text(to_markdown(result.report), encoding="utf-8", newline="\n")
     return report_path, trace_path

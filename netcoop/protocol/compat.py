@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime, timezone
 from typing import Any
 
 from netcoop.protocol.models import PROTOCOL_VERSION, Envelope
@@ -45,11 +46,49 @@ def upgrade(raw: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
     return out, records
 
 
-def upgrade_0_9(raw: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
-    """TODO(Lead): define the 0.9 dialect (see examples/finding_v0_9.json) and map it.
+# The netcoop/0.9 dialect (examples/finding_v0_9.json): envelope keys and a FINDING body.
+_ENVELOPE_0_9 = {"msg_id": "message_id", "incident": "incident_id", "from": "sender", "to": "recipient",
+                 "reply_to": "in_reply_to"}
+_FINDING_0_9 = {"id": "finding_id", "evidence": "evidence_ids", "why": "reason"}
 
-    Expected shape of the answer: rename old keys (e.g. msg_id -> message_id,
-    from -> sender, to -> recipient, kind -> type), fill in_reply_to=None if absent,
-    and append one record per conversion, e.g. "0.9 field 'msg_id' -> 'message_id'".
-    """
-    raise UnsupportedVersion("netcoop/0.9 upgrade not implemented yet")
+
+def upgrade_0_9(raw: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    """Map a netcoop/0.9 message to 1.0, one conversion record per change. Only the 0.9
+    FINDING was ever deployed; other 0.9 kinds are refused rather than guessed."""
+    records: list[str] = [f"upgraded netcoop/0.9 to {PROTOCOL_VERSION}"]
+    out: dict[str, Any] = {"protocol": PROTOCOL_VERSION}
+    for old, new in _ENVELOPE_0_9.items():
+        if old in raw:
+            out[new] = raw[old]
+            records.append(f"0.9 field '{old}' -> '{new}'")
+    out.setdefault("in_reply_to", None)
+    kind = str(raw.get("kind", "")).upper()
+    if kind != "FINDING":
+        raise UnsupportedVersion(f"netcoop/0.9 kind {raw.get('kind')!r} has no 1.0 mapping (only 'finding')")
+    out["type"] = kind
+    records.append(f"0.9 field 'kind' {raw.get('kind')!r} -> 'type' {kind!r}")
+    ts = raw.get("ts")
+    if isinstance(ts, (int, float)) and not isinstance(ts, bool):
+        out["timestamp"] = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        records.append(f"0.9 field 'ts' {ts} (Unix seconds) -> 'timestamp' {out['timestamp']}")
+    elif "ts" in raw:
+        out["timestamp"] = raw["ts"]           # left for validation to reject with a field path
+
+    body = raw.get("body") if isinstance(raw.get("body"), dict) else {}
+    payload: dict[str, Any] = {}
+    for old, new in _FINDING_0_9.items():
+        if old in body:
+            payload[new] = body[old]
+            records.append(f"0.9 body '{old}' -> payload '{new}'")
+    if "cause" in body and "target" in body:
+        payload["hypothesis"] = payload["target_hypothesis"] = f"{body['cause']}@{body['target']}"
+        records.append(f"0.9 body 'cause' + 'target' -> payload 'hypothesis' {payload['hypothesis']!r}")
+    if isinstance(body.get("supports"), bool):
+        payload["stance"] = "supports" if body["supports"] else "contradicts"
+        records.append(f"0.9 body 'supports' {body['supports']} -> payload 'stance' {payload['stance']!r}")
+    out["payload"] = payload
+    leftovers = sorted(set(raw) - set(_ENVELOPE_0_9) - {"protocol", "kind", "ts", "body"})
+    if leftovers:
+        out["extra"] = {k: raw[k] for k in leftovers}
+        records.append(f"preserved unknown 0.9 fields in extra: {leftovers}")
+    return out, records

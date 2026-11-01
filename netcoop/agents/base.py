@@ -10,6 +10,7 @@ from netcoop.protocol.models import (
     PROTOCOL_VERSION,
     Envelope,
     FindingPayload,
+    ResponsePayload,
     MessageType,
     Observation,
     Stance,
@@ -106,3 +107,22 @@ class BaseAgent:
             consumed_message_ids=list(consumed_message_ids),
         )
         return self.make(ctx, recipient, MessageType.FINDING, payload.model_dump(mode="json"), in_reply_to)
+
+    def answer(self, query: Envelope, ctx: IncidentContext) -> Envelope:
+        """Answer a Correlation QUERY: every fresh, usable sample of the desired measurement on
+        the target (or, for a link, its endpoints), so Correlation can judge severity itself."""
+        p = query.payload
+        metric, target = p["desired_measurement"], p["target_id"]
+        links = {l.get("link_id"): l for l in ctx.topology.get("links") or [] if isinstance(l, dict)}
+        places = [target] + ([links[target]["b"], links[target]["a"]] if target in links else [])
+        usable = []
+        for place in places:
+            usable = [o for o in ctx.for_target(place, metric) if o.value is not None
+                      and not {"missing", "stale", "out_of_window", "malformed"} & set(o.quality_flags)]
+            if usable:
+                break
+        values = [o.value for o in usable]
+        answer = (f"{len(usable)} fresh {metric} sample(s) on {usable[0].device_id or usable[0].link_id}: {values}"
+                  if usable else f"no fresh {metric} sample on {target}")
+        payload = ResponsePayload(query_id=p["query_id"], evidence_ids=[o.evidence_id for o in usable], answer=answer)
+        return self.make(ctx, query.sender, MessageType.RESPONSE, payload.model_dump(mode="json"), query.message_id)
