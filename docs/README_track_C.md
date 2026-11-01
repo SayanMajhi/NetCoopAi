@@ -204,6 +204,23 @@ So the peers change the conclusion: on congestion the normal run says
 `--control` run says `healthy@HOSTEL_UPLINK_01`. Peer evidence IDs that are not in the Bundle are
 never cited. If the analysis crashes, the service answers HTTP 500 with a typed `AGENT_FAILURE` ERROR.
 
+### Remote client — `netcoop/orchestrator/remote.py` (C4)
+
+`send_bundle(bundle, endpoint, *, timeout=5.0, retries=1)` is how the orchestrator reaches the
+Connectivity process (`netcoop run` without `--local`; `--endpoint` overrides the card's
+`http://127.0.0.1:8001`). It posts the Bundle to `<endpoint>/messages` with `httpx` and returns a
+`ConnectivityReply`: the raw reply messages (the bus validates each one), the raw request and
+response bodies for `traces/<incident>.jsonl`, and the HTTP status. It **never raises**.
+
+| What happens | Retried? | `error` |
+|---|---|---|
+| 2xx Bundle | — | `None` |
+| Connection refused / timeout | once | `AGENT_TIMEOUT: connectivity_unreachable: ...` → report limitation, status `insufficient_evidence` |
+| 502 / 503 / 504 | once | as the final reply |
+| 4xx / 500 with an ERROR Bundle | no (the agent's typed answer) | `AGENT_FAILURE: HTTP <n>: <code>: <detail>`; the ERRORs still go through the bus |
+| Not JSON / not a Bundle | no | `AGENT_FAILURE: HTTP <n>: ...`; the raw body is kept for the trace |
+| Anything unexpected | no | `AGENT_FAILURE: <exception>` |
+
 ## Tests
 
 | File | Tests | Covers |
@@ -212,6 +229,7 @@ never cited. If the analysis crashes, the service answers HTTP 500 with a typed 
 | `tests/test_bus.py` | 13 | Valid, duplicate and invalid messages all logged; v2 unsupported; missing protocol; 1.x unknown fields; malformed JSON; payload field paths; resend after fix; file-backed log |
 | `tests/test_connectivity_service.py` | 22 | Card; Bundle in/out; reply uses incident clock and repeats identically; bare envelope, empty messages, bad observation, unknown field rejected; TASK checks (missing field, not a TASK, wrong recipient, bad timestamp, v2); bad/v2/duplicate peers dropped with ERROR while the TASK is answered; 1.x extra fields; every message logged; analysis crash → `AGENT_FAILURE` |
 | `tests/test_connectivity_logic.py` | 17 | Topology upstream/blast radius; peers localise to the shared uplink and are consumed; control run differs; independent faults; contradicting/healthy/unknown peers; DNS/DHCP failure and server unreachable; unreachable devices; missing ≠ failure; determinism; real pipeline normal vs control |
+| `tests/test_remote.py` | 15 | Real service round trip keeps both bodies; refused/timeout retried once then `AGENT_TIMEOUT` (`connectivity_unreachable`); retry recovers; 503 retried, 400/500 not; non-JSON and non-Bundle replies; never raises; pipeline over HTTP traces bodies and control differs; unreachable agent → `insufficient_evidence` |
 
 ```bash
 pytest -q
