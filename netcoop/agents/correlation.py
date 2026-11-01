@@ -439,7 +439,7 @@ class CorrelationAgent(BaseAgent):
                                f"ranked by signature evidence strength (signal_fit {leader.factors['signal_fit']} vs "
                                f"{rival.factors['signal_fit']})")
 
-        corroborated = bool(leader) and leader.corroboration_met
+        corroborated = bool(leader) and leader.corroboration_met and not leader.refuted
         if corroborated and leader.required_pass and leader.confidence >= 0.70 and leader.coverage >= 0.75 \
                 and leader.factors["independent_source_fit"] == 1.0 and lead >= CLOSE and not unresolved:
             status = Status.diagnosed
@@ -688,6 +688,9 @@ def _healthy(ctx: IncidentContext, ranked: list[Candidate]) -> tuple[bool, float
 
 def _not_diagnosed(leader: Candidate, rival: Optional[Candidate], lead: float) -> list[str]:
     out = []
+    if leader.refuted:
+        out.append(f"{leader.hypothesis}: ruled out by a contradicting measurement: "
+                   f"{', '.join(c.name for c in leader.contradicting_checks if c.state == 'pass') or 'a required check failed'}")
     if not leader.corroboration_met:
         out.append(f"{leader.hypothesis}: corroboration not met (needs {leader.corroboration_need})")
     unmet = [c.name for c in leader.required if c.state != "pass"]

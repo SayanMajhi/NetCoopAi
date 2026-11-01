@@ -45,7 +45,8 @@ CAUSE_TEXT = {"link_congestion": "link congestion", "weak_wifi": "a weak Wi-Fi s
 # Reported confidence is the heuristic-v1 score capped by status, so the number never says more than
 # the status does: nothing from one window is certain, and a cause that missed the diagnosed gate
 # (0.70) never outscores one that passed it. The uncapped score stays in the DECISION ranking.
-CONFIDENCE_CAP = {Status.diagnosed: 0.95, Status.healthy: 0.95, Status.probable: 0.69}
+CONFIDENCE_CAP = {Status.diagnosed: 0.95, Status.healthy: 0.95, Status.probable: 0.69,
+                  Status.insufficient_evidence: 0.49}
 EXCLUDED_FLAGS = ("malformed", "missing", "stale", "out_of_window")
 
 
@@ -70,6 +71,8 @@ class ReportingAgent(BaseAgent):
         cap = CONFIDENCE_CAP.get(status)
         if cap is not None and confidence > cap:
             why = ("a cause that missed the diagnosed gate is reported below 0.70" if status == Status.probable
+                   else "an abstention is reported below the 0.50 probable gate"
+                   if status == Status.insufficient_evidence
                    else "no conclusion from one telemetry window is reported as certain")
             limitations.insert(0, f"heuristic-v1 score {confidence:.2f} reported as {cap:.2f}: {why}")
             confidence = cap

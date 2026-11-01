@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import threading
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -47,6 +48,7 @@ PERFORMANCE = "performance_agent"
 INFRASTRUCTURE = "infrastructure_agent"
 CONNECTIVITY = "connectivity_agent"
 CORRELATION = "correlation_agent"
+AGENT_DEADLINE_S = 5.0   # an in-process agent that has not answered by then is reported as AGENT_TIMEOUT
 
 Normalizer = Callable[[dict[str, Any], dict[str, Any], dict[str, Any]], NormalizationResult]
 
@@ -246,7 +248,10 @@ def _run_incident(fixture: Any, topology: dict[str, Any], signatures: dict[str, 
         if agent is None:
             continue
         try:
-            outputs = agent.handle(task, ctx)
+            outputs = _call_with_deadline(agent, task, ctx)
+        except TimeoutError as exc:
+            run.failure(agent_id, task.message_id, ErrorCode.AGENT_TIMEOUT, str(exc))
+            continue
         except Exception as exc:
             run.failure(agent_id, task.message_id, ErrorCode.AGENT_FAILURE, f"{type(exc).__name__}: {exc}")
             continue
@@ -289,6 +294,27 @@ def _run_incident(fixture: Any, topology: dict[str, Any], signatures: dict[str, 
         ctx.normalization_log = log
         report = ReportingAgent().build(ctx, info, run.findings, version, run.limitations, _rejections(run))
     return RunResult(report=report, messages=run.messages, wire=run.wire, findings=run.findings)
+
+
+def _call_with_deadline(agent: BaseAgent, task: Envelope, ctx: IncidentContext,
+                        deadline_s: float = AGENT_DEADLINE_S) -> list[Envelope]:
+    """Run agent.handle on a daemon thread; a hung agent cannot stall the incident."""
+    box: dict[str, Any] = {}
+
+    def target() -> None:
+        try:
+            box["out"] = agent.handle(task, ctx)
+        except Exception as exc:
+            box["exc"] = exc
+
+    worker = threading.Thread(target=target, daemon=True)
+    worker.start()
+    worker.join(deadline_s)
+    if worker.is_alive():
+        raise TimeoutError(f"{agent.agent_id} did not answer within {deadline_s:g}s")
+    if "exc" in box:
+        raise box["exc"]
+    return box["out"]
 
 
 def _correlate(run: _Run, ctx: IncidentContext, comps: Components, simulate: Optional[str]) -> dict[str, Any]:
