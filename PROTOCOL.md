@@ -28,6 +28,10 @@ The typed models in [`netcoop/protocol/models.py`](netcoop/protocol/models.py) a
 - A finding **names a fault** only if it `supports` a non-`healthy` hypothesis, or `contradicts` a different hypothesis with a non-`healthy` alternative. Receivers (Connectivity, Correlation) must not treat "not X" as evidence for X.
 
 ## Versioning and compatibility
+
+Contract tags: `contract-1.0` (wire contract), `contract-1.0.1` (schemas enforce the model rules), `contract-1.0.2` (Phase 2 review: `sender`/`recipient` must be non-empty; the "Reading `stance`" rule above is part of the contract). All are `netcoop/1.0`: the changes only reject inputs that were already invalid in meaning.
+
+Receivers validate with the exported JSON Schema **and** the typed models: Python's `jsonschema` lets a `$` pattern match before a final newline, so the models (Rust regex) are the stricter second check. A message that fails either is a typed `ERROR`, never logged as valid.
 | Incoming | Behaviour |
 |---|---|
 | `netcoop/1.0` | validated as-is |
@@ -53,8 +57,8 @@ _Generated from `netcoop/protocol/models.py` (netcoop/1.0). Do not edit by hand.
 | `message_id` | string | yes | Deterministic, unique per incident |
 | `incident_id` | string | yes |  |
 | `in_reply_to` | string / null | yes | null only for a new incident or an unsolicited finding |
-| `sender` | string | yes |  |
-| `recipient` | string | yes |  |
+| `sender` | string | yes | Agent ID of the sender, as on its agent card |
+| `recipient` | string | yes | Agent ID of the recipient |
 | `type` | MessageType | yes |  |
 | `timestamp` | string | yes | RFC 3339 date-time with timezone, UTC preferred |
 | `payload` | object | yes |  |

@@ -518,10 +518,14 @@
       "type": "string"
     },
     "recipient": {
+      "description": "Agent ID of the recipient",
+      "minLength": 1,
       "title": "Recipient",
       "type": "string"
     },
     "sender": {
+      "description": "Agent ID of the sender, as on its agent card",
+      "minLength": 1,
       "title": "Sender",
       "type": "string"
     },

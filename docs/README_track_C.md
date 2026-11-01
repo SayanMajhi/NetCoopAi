@@ -180,7 +180,7 @@ Example (from the repo root; `curl.exe` in PowerShell):
 curl -i -H "Content-Type: application/json" --data @docs/m2_curl/bundle.json localhost:8001/messages
 ```
 
-Its peer FINDING **supports** `link_congestion@HOSTEL_UPLINK_01`, so the reply is `upstream_dependency@HOSTEL_UPLINK_01` with `consumed_message_ids: ["INC-0001-INF-02"]`.
+Its peer FINDING **supports** `link_congestion@HOSTEL_UPLINK_01`, so the reply is a scope finding on that hypothesis citing only Connectivity's own check `EV-015` (SW_CAMPUS_3 reachable), with `consumed_message_ids: ["INC-0001-INF-02"]`.
 `docs/m2_curl/bundle_bad_peer.json` is the same Bundle with `stance` removed from the peer FINDING: HTTP 200, a RESPONSE for the TASK and an ERROR `MISSING_FIELD` at `messages.1.payload.stance`.
 The Phase 1 proof (`docs/m1_curl/`) used single messages and no longer matches the endpoint.
 
@@ -195,15 +195,21 @@ needs thresholds: the checks it owns are booleans. Missing, stale or malformed c
 | `dns_success` / `dhcp_success` false on clients, server (`services` in topology) reachable | `dns_failure` / `dhcp_failure@SRV_DNS_DHCP_01` supports (0.8 for ≥ 2 clients and server known reachable, else 0.6) |
 | Same, but the server itself is unreachable | `upstream_dependency@SRV_LINK_01` **contradicts** `dns_failure` / `dhcp_failure` |
 | Every client's check succeeds | `healthy@SRV_DNS_DHCP_01` **contradicts** `dns_failure` / `dhcp_failure` |
-| Devices unreachable, all behind one link | `upstream_dependency@<link>` (or `@<switch>` when the switch just below still answers), with the blast radius |
-| **Peer FINDINGs** naming faults on topology elements (a `supports` finding, or a `contradicts` finding that offers a different hypothesis; "X contradicts X" only means "not X" and is ignored, see PROTOCOL.md "Reading stance") | `upstream_dependency@<deepest link they all share>` with blast radius and `consumed_message_ids`; 0.7 if two agents agree, 0.5 if one, 0.4 per link when the faults share no upstream |
-| No peer faults, every own check passes | `healthy@<common upstream of the TASK scope>` |
+| ≥ 2 distinct fault targets (peer-named, or own unreachable devices) behind one link that is not itself named | `upstream_dependency@<that link>` (or `@<switch>` when the switch just below still answers), citing **only its own** checks in the blast radius; consumes the peers involved |
+| **One peer-named fault** (a `supports` finding, or a `contradicts` finding offering a different hypothesis; "X contradicts X" only means "not X" and is ignored, see PROTOCOL.md "Reading stance") | a **scope** finding on the peer's own hypothesis (e.g. `link_congestion@HOSTEL_UPLINK_01` supports): blast radius and how its own reachability/service checks in that radius look; evidence = **its own checks only**, never the peer's IDs; the peer is referenced in `consumed_message_ids`. No own check in the radius → nothing, plus a RESPONSE saying so |
+| A peer names `weak_wifi@<AP>` | checks the AP **uplink** with its own path evidence (link loss vs `packet_loss_pct.warn`, reachability of the parent switch): healthy → `healthy@<uplink>` **contradicts** `upstream_dependency@<uplink>`; lossy/unreachable → `upstream_dependency@<uplink>` supports. Never blames the uplink from RSSI |
+| Every device behind a link answered, and no observation in the Bundle is missing/stale | `healthy@<link>` **contradicts** `upstream_dependency@<link>` (a statement about that path only) |
 | No checks of its own and no usable peers | a `RESPONSE` saying it cannot judge |
 
-So the peers change the conclusion: on congestion the normal run says
-`upstream_dependency@HOSTEL_UPLINK_01` (consuming the Performance/Infrastructure findings), the
-`--control` run, with no peers, can only say `healthy@<common upstream of the TASK scope>` (`CORE_RTR_01` for a campus-wide scope). Peer evidence IDs that are not in the Bundle are
-never cited. If the analysis crashes, the service answers HTTP 500 with a typed `AGENT_FAILURE` ERROR.
+Connectivity **never supports `healthy@…`**: it does not claim a campus, a zone or a link is healthy overall, only that a specific path is not an upstream dependency (Phase 2 review R1).
+
+So the peers change the conclusion: on congestion the normal run adds a scope finding
+`link_congestion@HOSTEL_UPLINK_01` supports (blast radius, all checked devices answering: a
+degradation, not an outage), consuming the Performance/Infrastructure findings; the `--control`
+run, with no peers, has no such finding. Peer evidence IDs that are not in the Bundle are
+rejected with `UNKNOWN_EVIDENCE`. If the analysis crashes, the service answers HTTP 500 with a
+typed `AGENT_FAILURE` ERROR; a bad input never does (the typed models run after the JSON Schema,
+so e.g. a trailing newline under a `$` pattern is `INVALID_VALUE`, logged `valid = 0`).
 
 ### Remote client — `netcoop/orchestrator/remote.py` (C4)
 

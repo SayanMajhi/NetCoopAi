@@ -186,8 +186,8 @@ class Envelope(_Strict):
     in_reply_to: Optional[str] = Field(
         description="null only for a new incident or an unsolicited finding"
     )
-    sender: str
-    recipient: str
+    sender: str = Field(min_length=1, description="Agent ID of the sender, as on its agent card")
+    recipient: str = Field(min_length=1, description="Agent ID of the recipient")
     type: MessageType
     timestamp: AwareDatetime = Field(description="RFC 3339 date-time with timezone, UTC preferred")
     payload: dict[str, Any]

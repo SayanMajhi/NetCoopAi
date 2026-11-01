@@ -49,7 +49,9 @@ CARDS: dict[str, AgentCard] = {
             protocol_versions=V,
             capabilities=["analyze_connectivity", "interpret_peer_findings"],
             owned_metrics=["dns_success", "dhcp_success", "reachability"],
-            hypotheses=["dns_failure", "dhcp_failure", "upstream_dependency", "healthy"],
+            # dns/dhcp/upstream/healthy from its own checks; the rest only as scope of a peer-named fault
+            hypotheses=["dns_failure", "dhcp_failure", "upstream_dependency", "healthy",
+                        "link_congestion", "interface_fault", "device_overload", "hardware_failure"],
         ),
         AgentCard(
             agent_id="correlation_agent",

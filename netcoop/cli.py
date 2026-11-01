@@ -33,7 +33,7 @@ def cmd_run(args: argparse.Namespace) -> int:
                           incident_id=f"INC-{Path(args.scenario).stem}")   # used when the file has none
     if unreadable:
         result.report.validation_errors[:] = [f"cannot read scenario: {unreadable}"]
-    report_path, trace_path = write_outputs(result, Path(args.out), Path(args.traces))
+    report_path, trace_path = write_outputs(result, Path(args.out), Path(args.traces), control=args.control)
     print(json.dumps(result.report.model_dump(mode="json"), indent=2))
     print(f"\nreport: {report_path}\ntrace:  {trace_path}", file=sys.stderr)
     return 0

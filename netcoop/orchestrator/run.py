@@ -315,11 +315,12 @@ def _latest(norm: NormalizationResult) -> Optional[datetime]:
 # --------------------------------------------------------------------------- outputs
 
 
-def write_outputs(result: RunResult, out_dir: Path, trace_dir: Path) -> tuple[Path, Path]:
-    """reports/<incident>.json and traces/<incident>.jsonl (messages, then wire records)."""
+def write_outputs(result: RunResult, out_dir: Path, trace_dir: Path, control: bool = False) -> tuple[Path, Path]:
+    """reports/<incident>.json and traces/<incident>.jsonl (messages, then wire records);
+    a --control run writes <incident>--control.* so it never overwrites the normal run."""
     out_dir.mkdir(parents=True, exist_ok=True)
     trace_dir.mkdir(parents=True, exist_ok=True)
-    incident = result.report.incident_id
+    incident = result.report.incident_id + ("--control" if control else "")
     report_path = out_dir / f"{incident}.json"
     trace_path = trace_dir / f"{incident}.jsonl"
     report_path.write_text(json.dumps(result.report.model_dump(mode="json"), indent=2) + "\n",

@@ -73,6 +73,8 @@ BAD_MESSAGES = {
     "payload does not match type": changed("finding.json", _set("type", "QUERY")),
     "ranking with unknown cause": changed("decision.json", lambda b: b["payload"]["ranking"][0].update(hypothesis="bogus@X")),
     "ranking confidence as string": changed("decision.json", lambda b: b["payload"]["ranking"][0].update(confidence="0.8")),
+    "empty sender": changed("finding.json", _set("sender", "")),
+    "empty recipient": changed("finding.json", _set("recipient", "")),
 }
 
 BAD_REPORTS = {
@@ -103,9 +105,13 @@ def client() -> TestClient:
 
 
 def post_as_peer(client: TestClient, body: dict[str, Any]) -> list[dict[str, Any]]:
-    """The REST service takes a Bundle: send `body` as a peer message behind a valid TASK."""
+    """The REST service takes a Bundle: send `body` as a peer message behind a valid TASK,
+    with the observations it cites (a peer citing absent evidence gets UNKNOWN_EVIDENCE)."""
     task = load("task.json")
-    resp = client.post("/messages", content=json.dumps({"messages": [task, body]}))
+    payload = body.get("payload") if isinstance(body.get("payload"), dict) else {}
+    cited = payload.get("evidence_ids") if isinstance(payload.get("evidence_ids"), list) else []
+    observations = [{**GOOD_OBSERVATION, "evidence_id": e} for e in cited if isinstance(e, str)]
+    resp = client.post("/messages", content=json.dumps({"messages": [task, body], "observations": observations}))
     assert resp.status_code == 200, f"REST returned {resp.status_code}"
     return resp.json()["messages"]
 
@@ -158,3 +164,15 @@ def test_good_report_accepted_everywhere(name: str) -> None:
 def test_good_observation_accepted_everywhere() -> None:
     Observation.model_validate(GOOD_OBSERVATION)
     assert not list(OBSERVATION_SCHEMA.iter_errors(GOOD_OBSERVATION))
+
+
+def test_trailing_newline_hypothesis_is_rejected_by_models_bus_and_rest(client: TestClient) -> None:
+    """Python's jsonschema lets `$` match before a final newline, so the schema check alone
+    accepts this; the models, the bus and the REST service (which runs the models too) must not."""
+    body = changed("finding.json", _set("payload.hypothesis", "link_congestion@HOSTEL_UPLINK_01\n"))
+    with pytest.raises(ValidationError):
+        Envelope.model_validate(copy.deepcopy(body))
+    accepted, error = MessageBus().deliver(copy.deepcopy(body))
+    assert accepted is None and error is not None
+    errors = [m for m in post_as_peer(client, {**body, "message_id": "PARITY-newline"}) if m["type"] == "ERROR"]
+    assert len(errors) == 1 and errors[0]["payload"]["code"] == "INVALID_VALUE"
