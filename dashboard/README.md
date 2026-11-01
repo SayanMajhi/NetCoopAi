@@ -1,32 +1,20 @@
-# React + TypeScript + Vite
+# NetCoop AI dashboard
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+React + Vite view of NetCoop runs. Every message and report is validated in the browser against the generated JSON Schemas in `../schemas/` (the same contract the Python bus and the Connectivity REST service enforce).
 
-Currently, two official plugins are available:
-
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+netcoop demo          # from the repo root: writes reports/*.json and traces/*.jsonl
+cd dashboard
+npm install
+npm run dev           # http://localhost:5173
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+What it shows for each run:
+- the report status, one-line summary, confidence, affected devices, limitations, rejected inputs and recommended actions;
+- every message of the incident trace (TASK, FINDING, QUERY, RESPONSE, DECISION, ERROR) with sender, recipient and schema check;
+- the competing causes from Correlation's DECISION (uncapped heuristic-v1 score, coverage, supporting and contradicting findings);
+- the cited evidence with its interpretation against the threshold.
+
+The samples in `../examples/` are listed after the real runs (they are what you see on a fresh clone before `netcoop demo`).
+
+`npm run gen:types` regenerates `src/types/` from `../schemas/`; CI fails if they drift.

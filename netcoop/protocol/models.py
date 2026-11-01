@@ -263,6 +263,9 @@ class EvidenceItem(_Strict):
     interval_delta: Optional[float] = Field(
         default=None, description="Cumulative counters only: increase since the previous sample of the same "
                                   "series. Null for non-counters, the first sample, after a gap, or on a counter reset")
+    interpretation: Optional[str] = Field(
+        default=None, description="What the value means against its configured threshold, e.g. "
+                                  "'above critical 90 percent' (contract-1.0.4)")
 
 
 _NAMED = [Status.diagnosed.value, Status.probable.value]
@@ -292,6 +295,8 @@ class Report(_Strict):
     incident_id: str
     status: Status
     suspected_root_cause: Optional[str]
+    summary: Optional[str] = Field(default=None, description="One plain-language sentence stating the outcome "
+                                                             "(contract-1.0.4)")
     confidence: Optional[float] = Field(ge=0, le=1, strict=True)
     confidence_method: str = "heuristic-v1"
     signature_version: str

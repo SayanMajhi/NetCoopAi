@@ -7,6 +7,19 @@
           "title": "Evidence Id",
           "type": "string"
         },
+        "interpretation": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What the value means against its configured threshold, e.g. 'above critical 90 percent' (contract-1.0.4)",
+          "title": "Interpretation"
+        },
         "interval_delta": {
           "anyOf": [
             {
@@ -250,6 +263,19 @@
     },
     "status": {
       "$ref": "#/$defs/Status"
+    },
+    "summary": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "One plain-language sentence stating the outcome (contract-1.0.4)",
+      "title": "Summary"
     },
     "supporting_evidence": {
       "items": {

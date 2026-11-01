@@ -21,7 +21,7 @@ import yaml
 
 from netcoop.agents.base import BaseAgent, IncidentContext
 from netcoop.agents.correlation import CorrelationAgent
-from netcoop.agents.reporting import ReportingAgent, to_markdown
+from netcoop.agents.reporting import ReportingAgent, summarize, to_markdown
 from netcoop.normalizer.result import NormalizationResult
 from netcoop.orchestrator.bus import MessageBus
 from netcoop.orchestrator.eventlog import EventLog
@@ -185,6 +185,15 @@ def run_incident(fixture: Any, topology: dict[str, Any], signatures: dict[str, A
                  connectivity: str = "remote", endpoint: str = DEFAULT_ENDPOINT,
                  incident_id: Optional[str] = None) -> RunResult:
     """`incident_id` is used when the input has none (an untouched generator record)."""
+    result = _run_incident(fixture, topology, signatures, components=components, control=control,
+                           connectivity=connectivity, endpoint=endpoint, incident_id=incident_id)
+    result.report.summary = summarize(result.report)
+    return result
+
+
+def _run_incident(fixture: Any, topology: dict[str, Any], signatures: dict[str, Any], *,
+                  components: Optional[Components], control: bool, connectivity: str, endpoint: str,
+                  incident_id: Optional[str]) -> RunResult:
     comps = components if components is not None else default_components(connectivity, endpoint)
     version = str(signatures.get("version", "unknown"))
     given = fixture.get("incident_id") if isinstance(fixture, dict) else None
@@ -271,7 +280,7 @@ def run_incident(fixture: Any, topology: dict[str, Any], signatures: dict[str, A
         report = _fallback(run, version, log)
     else:
         ctx.normalization_log = log
-        report = ReportingAgent().build(ctx, info, run.findings, version, run.limitations, [])
+        report = ReportingAgent().build(ctx, info, run.findings, version, run.limitations, _rejections(run))
     return RunResult(report=report, messages=run.messages, wire=run.wire, findings=run.findings)
 
 
@@ -333,8 +342,27 @@ def _fallback(run: _Run, version: str, normalization_log: list[str]) -> Report:
         signature_version=version, recommended_actions=["Re-run the diagnosis once the correlation service is healthy",
                                                         "Review the listed agent findings manually meanwhile"],
         agent_findings=finding_ids, evidence_sources=sources, limitations=run.limitations,
-        normalization_log=normalization_log, agent_trace_id=f"{run.incident_id}-TRACE",
+        normalization_log=normalization_log, validation_errors=_rejections(run),
+        agent_trace_id=f"{run.incident_id}-TRACE",
     )
+
+
+# Typed ERRORs for messages the bus rejected: the report must name them, not only the trace.
+PROTOCOL_ERRORS = {ErrorCode.SCHEMA_VERSION_UNSUPPORTED, ErrorCode.MISSING_FIELD, ErrorCode.INVALID_VALUE,
+                   ErrorCode.MALFORMED_JSON, ErrorCode.DUPLICATE_MESSAGE, ErrorCode.UNKNOWN_EVIDENCE,
+                   ErrorCode.UNKNOWN_RECIPIENT}
+
+
+def _rejections(run: _Run) -> list[str]:
+    codes = {c.value for c in PROTOCOL_ERRORS}
+    out = []
+    for m in run.messages:
+        if m.type != MessageType.ERROR.value or m.payload.get("code") not in codes:
+            continue
+        p = m.payload
+        where = f", field {p['field_path']}" if p.get("field_path") else ""
+        out.append(f"{p['code']} (message {p.get('offending_message_id') or 'unknown'}{where}): {p['detail']}")
+    return out
 
 
 def _terminal(incident_id: str, status: Status, version: str, *, validation_errors: Optional[list[str]] = None,

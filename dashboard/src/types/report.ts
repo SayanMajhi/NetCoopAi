@@ -15,6 +15,7 @@ export type Report = {
   recommended_actions?: RecommendedActions;
   signature_version: SignatureVersion;
   status: Status;
+  summary?: Summary;
   supporting_evidence?: SupportingEvidence;
   suspected_root_cause: SuspectedRootCause;
   validation_errors?: ValidationErrors;
@@ -37,7 +38,15 @@ export type SignatureVersion = string;
  * via the `definition` "Status".
  */
 export type Status = "diagnosed" | "probable" | "healthy" | "insufficient_evidence" | "invalid_input" | "failed";
+/**
+ * One plain-language sentence stating the outcome (contract-1.0.4)
+ */
+export type Summary = string | null;
 export type EvidenceId = string;
+/**
+ * What the value means against its configured threshold, e.g. 'above critical 90 percent' (contract-1.0.4)
+ */
+export type Interpretation = string | null;
 /**
  * Cumulative counters only: increase since the previous sample of the same series. Null for non-counters, the first sample, after a gap, or on a counter reset
  */
@@ -56,6 +65,7 @@ export type ValidationErrors = string[];
  */
 export interface EvidenceItem {
   evidence_id: EvidenceId;
+  interpretation?: Interpretation;
   interval_delta?: IntervalDelta;
   metric: Metric;
   source_id: SourceId;

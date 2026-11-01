@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { decision, feed, reports } from "./data";
+import type { DecisionPayload } from "./types/message";
 import type { Report } from "./types/report";
 
 const STATUS_COLOURS: Record<Report["status"], string> = {
@@ -17,13 +18,17 @@ export default function App() {
   const [reportFile, setReportFile] = useState<string>(reports[0]?.file ?? "");
   const current = reports.find((r) => r.file === reportFile) ?? reports[0];
   const report = current?.report;
-  const raw = feed.find((f) => f.file === selected)?.raw ?? report;
+  const items = current?.trace ?? feed;
+  const ranking = (current?.trace
+    ? (items.find((f) => f.message?.type === "DECISION")?.message?.payload as unknown as DecisionPayload | undefined)
+    : decision)?.ranking;
+  const raw = items.find((f) => f.file === selected)?.raw ?? report;
 
   return (
     <main>
       <header>
         <h1>NetCoop AI</h1>
-        <p className="muted">Mock views over <code>examples/</code>, validated in the browser against <code>schemas/*.json</code>.</p>
+        <p className="muted">Real runs from <code>reports/</code> + <code>traces/</code> (run <code>netcoop demo</code> first), then the samples in <code>examples/</code>; every message and report is validated in the browser against <code>schemas/*.json</code>.</p>
         <div className="legend">{STATUSES.map((s) => <Badge key={s} status={s} />)}</div>
       </header>
 
@@ -38,6 +43,7 @@ export default function App() {
         </div>
         {report && (
           <div className="card">
+            {report.summary && <p><strong>{report.summary}</strong></p>}
             <p>
               <Badge status={report.status} /> <strong>{report.suspected_root_cause ?? "no cause named"}</strong>
               {report.confidence != null && <> — confidence {report.confidence}</>}
@@ -53,11 +59,11 @@ export default function App() {
 
       <div className="grid">
         <section>
-          <h2>Agent messages</h2>
+          <h2>Agent messages {current?.trace ? <span className="muted small">({items.length} in {report?.agent_trace_id})</span> : <span className="muted small">(sample)</span>}</h2>
           <table>
             <thead><tr><th>Type</th><th>From → To</th><th>Message</th><th>Check</th></tr></thead>
             <tbody>
-              {feed.map((f) => {
+              {items.map((f) => {
                 const sender = String(f.raw.sender ?? f.raw.from ?? "?");
                 const recipient = String(f.raw.recipient ?? f.raw.to ?? "?");
                 return (
@@ -75,7 +81,7 @@ export default function App() {
 
         <section>
           <h2>Competing causes</h2>
-          {decision?.ranking?.map((c) => (
+          {ranking?.map((c) => (
             <div key={c.hypothesis} className="cause">
               <div className="row"><code>{c.hypothesis}</code><span>{c.confidence.toFixed(2)}</span></div>
               <div className="bar"><div style={{ width: `${c.confidence * 100}%` }} /></div>
@@ -87,11 +93,11 @@ export default function App() {
 
           <h2>Evidence</h2>
           <table>
-            <thead><tr><th>ID</th><th>Metric</th><th>Value</th><th>Source</th></tr></thead>
+            <thead><tr><th>ID</th><th>Metric</th><th>Value</th><th>Meaning</th><th>Source</th></tr></thead>
             <tbody>
               {report?.supporting_evidence?.length ? report.supporting_evidence.map((e) => (
-                <tr key={e.evidence_id}><td><code>{e.evidence_id}</code></td><td>{e.metric}</td><td>{String(e.value)} {e.unit}</td><td>{e.source_id}</td></tr>
-              )) : <tr><td colSpan={4} className="muted">No supporting evidence in this report.</td></tr>}
+                <tr key={e.evidence_id}><td><code>{e.evidence_id}</code></td><td>{e.metric}</td><td>{String(e.value)} {e.unit}</td><td>{e.interpretation ?? ""}</td><td>{e.source_id}</td></tr>
+              )) : <tr><td colSpan={5} className="muted">No supporting evidence in this report.</td></tr>}
             </tbody>
           </table>
         </section>

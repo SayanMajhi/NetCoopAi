@@ -54,12 +54,38 @@ export const decision = feed.find((f) => f.message?.type === "DECISION")?.messag
   | DecisionPayload
   | undefined;
 
-export const reports: { file: string; report: Report; check: Check }[] = Object.keys(byName)
-  .filter((name) => name.startsWith("report_"))
-  .sort()
-  .map((name) => {
-    const raw = byName[name];
-    const ok = validateReport(raw);
-    const check: Check = ok ? { valid: true } : { valid: false, reason: validateReport.errors?.[0]?.message ?? "invalid" };
-    return { file: `${name}.json`, report: raw as unknown as Report, check };
-  });
+export interface ReportItem {
+  file: string;
+  report: Report;
+  check: Check;
+  trace?: FeedItem[]; // the real message trace, for reports written by `netcoop run` / `netcoop demo`
+}
+
+function checkReport(raw: Record<string, unknown>): Check {
+  return validateReport(raw) ? { valid: true } : { valid: false, reason: validateReport.errors?.[0]?.message ?? "invalid" };
+}
+
+// Real runs: reports/*.json and traces/*.jsonl written by `netcoop demo` (git-ignored; empty on a fresh clone).
+const runReports = import.meta.glob<Record<string, unknown>>("../../reports/*.json", { eager: true, import: "default" });
+const runTraces = import.meta.glob<string>("../../traces/*.jsonl", { eager: true, query: "?raw", import: "default" });
+
+function traceFeed(incident: string): FeedItem[] | undefined {
+  const text = Object.entries(runTraces).find(([path]) => path.endsWith(`/${incident}.jsonl`))?.[1];
+  if (!text) return undefined;
+  return text.split("\n").filter((line) => line.trim()).map((line) => JSON.parse(line) as Record<string, unknown>)
+    .filter((rec) => rec.kind === "message")
+    .map(({ kind: _kind, ...raw }) => { // `kind` is the trace line's tag, not part of the envelope
+      const check = checkMessage(raw);
+      return { file: String(raw.message_id), raw, message: check.valid ? (raw as unknown as Envelope) : null, check };
+    });
+}
+
+export const reports: ReportItem[] = [
+  ...Object.entries(runReports).sort(([a], [b]) => a.localeCompare(b)).map(([path, raw]) => ({
+    file: path.split("/").pop()!, report: raw as unknown as Report, check: checkReport(raw),
+    trace: traceFeed(String(raw.incident_id)),
+  })),
+  ...Object.keys(byName).filter((name) => name.startsWith("report_")).sort().map((name) => ({
+    file: `${name}.json`, report: byName[name] as unknown as Report, check: checkReport(byName[name]),
+  })),
+];
