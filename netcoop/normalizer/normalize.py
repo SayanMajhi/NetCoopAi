@@ -43,7 +43,8 @@ RAW_METRICS: dict[str, tuple[str, str, float]] = {
 _BOOLEANS = {"dns_success", "dhcp_success", "reachability"}
 _COUNTERS = {"queue_drops", "interface_errors", "link_flap_count"}
 _PERCENTAGES = {"cpu_pct", "memory_pct", "link_utilization_pct", "packet_loss_pct", "retry_rate_pct"}
-_WRAPPER_KEYS = {"incident_id", "window_end", "complaint", "records", "messages", "inject"}
+_WRAPPER_KEYS = {"incident_id", "window_end", "complaint", "records", "messages", "inject", "on_query"}
+ON_DEMAND_PREFIX = "on-demand"   # source_id of probe samples that are run only when a QUERY asks
 _RECORD_KEYS = {"timestamp", "device_id", "link_id", "source_id", "metrics", "status"}
 
 
@@ -87,6 +88,31 @@ def _load(fixture: Any) -> tuple[Any, list[str]]:
 
 
 def normalize(fixture: dict, topology: dict, signatures: dict) -> NormalizationResult:
+    """Normalize the window's records; an optional `on_query` block holds on-demand probe samples
+    (source_id starting "on-demand") that agents release only when Correlation QUERYs them."""
+    probes = fixture.get("on_query") if isinstance(fixture, dict) else None
+    main = {k: v for k, v in fixture.items() if k != "on_query"} if probes is not None else fixture
+    result = _normalize_window(main, topology, signatures)
+    if probes is None or result.validation_errors:
+        return result
+    if not isinstance(probes, list) or not probes or any(
+            not isinstance(r, dict) or not str(r.get("source_id", "")).startswith(ON_DEMAND_PREFIX) for r in probes):
+        result.validation_errors.append(f"on_query: expected a non-empty list of records with source_id '{ON_DEMAND_PREFIX}-…'")
+        result.observations.clear()
+        return result
+    probe = _normalize_window({"window_end": main.get("window_end"), "records": probes}, topology, signatures)
+    if probe.validation_errors:
+        result.validation_errors += [f"on_query: {e}" for e in probe.validation_errors]
+        result.observations.clear()
+        return result
+    start = len(result.observations)
+    result.on_demand = [o.model_copy(update={"evidence_id": f"EV-{start + i:03d}"})
+                        for i, o in enumerate(probe.observations, 1)]
+    result.normalization_log += [f"on_query {line}" for line in probe.normalization_log]
+    return result
+
+
+def _normalize_window(fixture: dict, topology: dict, signatures: dict) -> NormalizationResult:
     """Return evidence or field-level errors; never raise for bad fixture data."""
     document, errors = _load(fixture)
     result = NormalizationResult(validation_errors=errors)
@@ -194,7 +220,7 @@ def normalize(fixture: dict, topology: dict, signatures: dict) -> NormalizationR
         if not start <= row["observed_at"] <= result.window_end:
             row["quality_flags"] = [f for f in row["quality_flags"] if f != "ok"] + ["stale", "out_of_window"]
             result.normalization_log.append(f"{row['_target']} {row['metric']} at {row['observed_at'].isoformat()}: outside incident window")
-    _utilization(rows, link_by_id, result.normalization_log)
+    _utilization(rows, link_by_id, result.normalization_log, signatures)
     _counter_resets(rows, result.normalization_log)
     rows.sort(key=lambda r: (r["_target"], r["metric"], r["observed_at"], r["source_id"], r["original_field"], r["_ordinal"]))
     for index, row in enumerate(rows, 1):
@@ -208,7 +234,13 @@ def normalize(fixture: dict, topology: dict, signatures: dict) -> NormalizationR
     return result
 
 
-def _utilization(rows: list[dict[str, Any]], links: dict[str, dict], log: list[str]) -> None:
+def _utilization(rows: list[dict[str, Any]], links: dict[str, dict], log: list[str],
+                 signatures: dict[str, Any]) -> None:
+    check = signatures.get("utilization_cross_check") or {}
+    tolerance = check.get("tolerance_points", 5)
+    max_ratio = check.get("max_throughput_ratio_pct", 110)
+    util_th = (signatures.get("thresholds") or {}).get("link_utilization_pct") or {}
+    warn, critical = util_th.get("warn"), util_th.get("critical")
     groups: dict[tuple[str, datetime], dict[str, dict[str, Any]]] = {}
     for row in rows:
         groups.setdefault((row["_target"], row["observed_at"]), {})[row["metric"]] = row
@@ -225,13 +257,33 @@ def _utilization(rows: list[dict[str, Any]], links: dict[str, dict], log: list[s
         derived = 100 * throughput["value"] / capacity
         measured = metrics.get("link_utilization_pct")
         if measured is not None and measured["value"] is not None:
-            if abs(measured["value"] - derived) > 5:
-                measured["quality_flags"] = [f for f in measured["quality_flags"] if f != "ok"] + ["malformed"]
-                log.append(f"{target} at {observed_at.isoformat()}: measured utilization {measured['value']:g}% differs from throughput/capacity {derived:g}% by over 5 points")
-            continue
+            m, when = measured["value"], f"{target} at {observed_at.isoformat()}"
+            if derived > max_ratio:
+                log.append(f"{when}: throughput/capacity {derived:g}% is impossible (> {max_ratio:g}%); "
+                           f"cross-check skipped, measured utilization {m:g}% kept")
+            elif abs(m - derived) > tolerance:
+                verdicts_differ = warn is not None and critical is not None and (
+                    (m > critical and derived <= warn) or (derived > critical and m <= warn))
+                note = f"cross-check mismatch: measured {m:g}% vs throughput/capacity {derived:g}%"
+                measured["normalization_steps"] = measured["normalization_steps"] + [note]
+                if verdicts_differ:
+                    measured["quality_flags"] = [f for f in measured["quality_flags"] if f != "ok"] + ["malformed"]
+                    log.append(f"{when}: {note}; they disagree about the verdict (critical {critical:g}% vs "
+                               f"warn {warn:g}%), measured value marked malformed")
+                else:
+                    log.append(f"{when}: {note} (over {tolerance:g} points) but both give the same verdict; "
+                               "measured value kept")
+            if derived > max_ratio:
+                continue
+            # Keep the second, independent estimate too (flagged `derived`): Correlation judges each
+            # estimator's series on its own, so one noisy counter cannot hide what the other shows.
         flags = ["derived"]
+        steps = [f"throughput_mbps / capacity_mbps ({capacity:g}) x 100"]
         if "stale" in throughput["quality_flags"]:
             flags += ["stale", "out_of_window"]
+        if math.isfinite(derived) and 100 < derived <= max_ratio:
+            steps.append(f"{derived:g}% capped at 100% (counter timing jitter within {max_ratio:g}%)")
+            derived = 100.0
         if not math.isfinite(derived) or derived < 0 or derived > 100:
             flags.append("malformed")
             log.append(f"{target} at {observed_at.isoformat()}: derived utilization outside 0-100%; check capacity and units")
@@ -240,7 +292,7 @@ def _utilization(rows: list[dict[str, Any]], links: dict[str, dict], log: list[s
             "device_id": throughput["device_id"], "link_id": throughput["link_id"],
             "metric": "link_utilization_pct", "value": derived if "malformed" not in flags else None, "unit": "percent",
             "original_field": throughput["original_field"], "original_value": throughput["original_value"],
-            "normalization_steps": [f"throughput_mbps / capacity_mbps ({capacity:g}) x 100"],
+            "normalization_steps": steps,
             "quality_flags": flags, "_target": target, "_ordinal": len(rows),
         })
         log.append(f"{target} at {observed_at.isoformat()}: derived utilization {derived:g}% from throughput/capacity")

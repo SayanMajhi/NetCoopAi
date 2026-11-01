@@ -958,5 +958,31 @@
     "throughput_mbps": 324.0
    }
   }
+ ],
+ "on_query": [
+  {
+   "timestamp": "2026-11-01T10:04:40Z",
+   "link_id": "ACC_LINK_07",
+   "source_id": "on-demand-probe",
+   "metrics": {
+    "interface_errors": 289
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:04:50Z",
+   "link_id": "ACC_LINK_07",
+   "source_id": "on-demand-probe",
+   "metrics": {
+    "interface_errors": 295
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:05:00Z",
+   "link_id": "ACC_LINK_07",
+   "source_id": "on-demand-probe",
+   "metrics": {
+    "interface_errors": 301
+   }
+  }
  ]
 }

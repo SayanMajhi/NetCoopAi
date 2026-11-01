@@ -110,6 +110,18 @@ def congestion_overlay(s: Scenario, link: str, switch: str, probe: str) -> None:
     s.set("device_id", probe, PROBE, "packet_loss_pct", s.noisy(0.6, 2.2, 2))
 
 
+ON_DEMAND = "on-demand-probe"
+PROBE_TIMES = ["2026-11-01T10:04:40Z", "2026-11-01T10:04:50Z", "2026-11-01T10:05:00Z"]
+
+
+def on_query(*probes: tuple[str, str, str, list[Any]]) -> list[dict[str, Any]]:
+    """Held-back on-demand probe samples (kind, target, metric, 3 values 10 s apart at the end of
+    the window). An agent releases them only when Correlation QUERYs that measurement, so the
+    RESPONSE carries new evidence instead of re-reading the window."""
+    return [{"timestamp": t, kind: target, "source_id": ON_DEMAND, "metrics": {metric: values[i]}}
+            for kind, target, metric, values in probes for i, t in enumerate(PROBE_TIMES)]
+
+
 def finding_message(incident: str, message_id: str, hypothesis: str, stance: str = "supports") -> dict[str, Any]:
     return {"protocol": "netcoop/1.0", "message_id": message_id, "incident_id": incident, "in_reply_to": None,
             "sender": "external_monitor", "recipient": "correlation_agent", "type": "FINDING",
@@ -137,7 +149,8 @@ def false_report() -> dict[str, Any]:
 def congestion() -> dict[str, Any]:
     s = background(103)
     congestion_overlay(s, "HOSTEL_UPLINK_01", "SW_CAMPUS_1", "SW_CAMPUS_3")
-    return wrap("INC-0103", "Hostel blocks report slow internet in the evening", s.records())
+    return wrap("INC-0103", "Hostel blocks report slow internet in the evening", s.records(),
+                on_query=on_query(("link_id", "HOSTEL_UPLINK_01", "link_utilization_pct", [95.8, 96.9, 94.7])))
 
 
 def weak_wifi() -> dict[str, Any]:
@@ -146,7 +159,8 @@ def weak_wifi() -> dict[str, Any]:
     s.set("device_id", "HOSTEL_AP_01", WLC, "retry_rate_pct", s.noisy(27, 36))
     s.set("device_id", "HOSTEL_AP_01", PROBE, "latency_ms", s.noisy(60, 110))
     s.set("device_id", "HOSTEL_AP_01", PROBE, "packet_loss_pct", s.noisy(2, 4.5, 2))
-    return wrap("INC-0104", "Hostel block A Wi-Fi keeps dropping", s.records())
+    return wrap("INC-0104", "Hostel block A Wi-Fi keeps dropping", s.records(),
+                on_query=on_query(("device_id", "HOSTEL_AP_01", "rssi_dbm", [-80.0, -81.0, -79.0])))
 
 
 def interface_fault() -> dict[str, Any]:
@@ -156,7 +170,8 @@ def interface_fault() -> dict[str, Any]:
     s.set("link_id", "ACC_LINK_07", SWITCH, "link_utilization_pct", s.noisy(18, 30))
     s.set("device_id", "SW_CAMPUS_7", PROBE, "packet_loss_pct", s.noisy(4, 7, 2))
     s.set("device_id", "SW_CAMPUS_7", PROBE, "latency_ms", s.noisy(25, 55))
-    return wrap("INC-0105", "CSE department wired connections are flaky", s.records())
+    return wrap("INC-0105", "CSE department wired connections are flaky", s.records(),
+                on_query=on_query(("link_id", "ACC_LINK_07", "interface_errors", [289, 295, 301])))
 
 
 def dns_failure() -> dict[str, Any]:
@@ -177,7 +192,9 @@ def ambiguous_congestion_errors() -> dict[str, Any]:
     s = background(108)
     congestion_overlay(s, "DEPT_UPLINK_01", "SW_CAMPUS_2", "SW_CAMPUS_8")
     s.set("link_id", "DEPT_UPLINK_01", SWITCH, "interface_errors", [12, 17, 21, 26, 30])
-    return wrap("INC-0108", "Department network slow; switch logs show CRC errors", s.records())
+    return wrap("INC-0108", "Department network slow; switch logs show CRC errors", s.records(),
+                on_query=on_query(("link_id", "DEPT_UPLINK_01", "link_utilization_pct", [95.1, 96.4, 94.8]),
+                                  ("link_id", "DEPT_UPLINK_01", "interface_errors", [30, 31, 32])))
 
 
 def missing_stale() -> dict[str, Any]:
@@ -198,7 +215,8 @@ def unit_mismatch() -> dict[str, Any]:
     s.set("link_id", "DEPT_UPLINK_01", SWITCH, "throughput_kbps", kbps)
     probe = s.series[("device_id", "SW_CAMPUS_8", PROBE)]
     probe["rtt_sec"] = [round(v / 1000, 3) for v in probe.pop("latency_ms")]
-    return wrap("INC-0110", "Department slow; data from a legacy collector", s.records())
+    return wrap("INC-0110", "Department slow; data from a legacy collector", s.records(),
+                on_query=on_query(("link_id", "DEPT_UPLINK_01", "link_utilization_pct", [95.1, 96.4, 94.8])))
 
 
 def counter_reset() -> dict[str, Any]:
@@ -218,7 +236,8 @@ def schema_0_9() -> dict[str, Any]:
               "from": "legacy_switch_monitor", "to": "correlation_agent", "kind": "finding", "ts": 1793527500,
               "body": {"id": "F-LEG-01", "cause": "interface_fault", "target": "HOSTEL_UPLINK_01",
                        "supports": True, "evidence": ["EV-001"], "why": "CRC errors rising on uplink"}}
-    return wrap("INC-0112", "Hostel packet loss; legacy monitor raised an alarm", s.records(), messages=[legacy])
+    return wrap("INC-0112", "Hostel packet loss; legacy monitor raised an alarm", s.records(), messages=[legacy],
+                on_query=on_query(("link_id", "HOSTEL_UPLINK_01", "interface_errors", [150, 155, 159])))
 
 
 def _sparse(seed: int) -> Scenario:
@@ -245,7 +264,8 @@ def duplicate_message() -> dict[str, Any]:
     s = background(115)
     congestion_overlay(s, "HOSTEL_UPLINK_01", "SW_CAMPUS_1", "SW_CAMPUS_3")
     msg = finding_message("INC-0115", "INC-0115-EXT-01", "link_congestion@HOSTEL_UPLINK_01")
-    return wrap("INC-0115", "Hostel slow; the NMS alarm was sent twice", s.records(), messages=[msg, msg])
+    return wrap("INC-0115", "Hostel slow; the NMS alarm was sent twice", s.records(), messages=[msg, msg],
+                on_query=on_query(("link_id", "HOSTEL_UPLINK_01", "link_utilization_pct", [95.8, 96.9, 94.7])))
 
 
 def correlation_timeout() -> dict[str, Any]:

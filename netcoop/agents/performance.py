@@ -75,13 +75,23 @@ def _rising_drops(ctx: IncidentContext, scope: set[str], minutes: float) -> list
 
 def _streak(samples: list[Observation], ctx: IncidentContext, minutes: float,
             critical: float, minimum: int) -> list[Observation]:
+    """`minimum` samples above critical in one run; a dip into the warn band does not end the run
+    (signatures vocabulary `sustained_above_critical`), a sample at or below warn or a stale one does."""
+    warn = _limit(ctx, "link_utilization_pct", "warn")
+    times = sorted({o.observed_at for o in samples})
+    step = min(((b - a).total_seconds() for a, b in zip(times, times[1:]) if b > a), default=0.0)
     consecutive: list[Observation] = []
+    previous = None
     for obs in samples:
-        if _fresh(ctx, obs, minutes) and obs.value > critical:
+        if previous is not None and step and (obs.observed_at - previous).total_seconds() > 1.5 * step:
+            consecutive.clear()            # a missing interval ends the run
+        previous = obs.observed_at
+        fresh = _fresh(ctx, obs, minutes)
+        if fresh and obs.value > critical:
             consecutive.append(obs)
             if len(consecutive) >= minimum:
                 return consecutive[-minimum:]
-        else:
+        elif not fresh or warn is None or obs.value <= warn:
             consecutive.clear()
     return []
 
@@ -127,7 +137,13 @@ class PerformanceAgent(BaseAgent):
         targets = sorted({o.device_id or o.link_id for o in ctx.by_metric("link_utilization_pct")})
         findings: list[Envelope] = []
         for target in targets:
-            samples = ctx.for_target(target, "link_utilization_pct")
+            every = ctx.for_target(target, "link_utilization_pct")
+            measured = [o for o in every if "derived" not in o.quality_flags]
+            derived = [o for o in every if "derived" in o.quality_flags]
+            samples = measured or derived
+            if measured and derived and not _streak(measured, ctx, minutes, critical, minimum) \
+                    and _streak(derived, ctx, minutes, critical, minimum):
+                samples = derived      # the independent throughput/capacity estimate shows the run
             scope = _scope(ctx, target)
             high = _streak(samples, ctx, minutes, critical, minimum)
             latency = _p95_above(ctx, "latency_ms", scope, minutes)

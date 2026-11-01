@@ -889,5 +889,31 @@
     "why": "CRC errors rising on uplink"
    }
   }
+ ],
+ "on_query": [
+  {
+   "timestamp": "2026-11-01T10:04:40Z",
+   "link_id": "HOSTEL_UPLINK_01",
+   "source_id": "on-demand-probe",
+   "metrics": {
+    "interface_errors": 150
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:04:50Z",
+   "link_id": "HOSTEL_UPLINK_01",
+   "source_id": "on-demand-probe",
+   "metrics": {
+    "interface_errors": 155
+   }
+  },
+  {
+   "timestamp": "2026-11-01T10:05:00Z",
+   "link_id": "HOSTEL_UPLINK_01",
+   "source_id": "on-demand-probe",
+   "metrics": {
+    "interface_errors": 159
+   }
+  }
  ]
 }

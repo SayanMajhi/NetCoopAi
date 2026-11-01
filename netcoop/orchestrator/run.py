@@ -209,8 +209,9 @@ def run_incident(fixture: Any, topology: dict[str, Any], signatures: dict[str, A
     if clock is None:
         return _terminal(incident_id, Status.invalid_input, version,
                          validation_errors=["no window_end and no timestamped observations"])
-    ctx = IncidentContext(incident_id=incident_id, clock=clock, observations=norm.observations,
-                          topology=topology, signatures=signatures, normalization_log=norm.normalization_log)
+    ctx = IncidentContext(incident_id=incident_id, clock=clock, observations=list(norm.observations),
+                          topology=topology, signatures=signatures, normalization_log=norm.normalization_log,
+                          on_demand=list(norm.on_demand))
     run = _Run(incident_id, clock)
     run.known_evidence = {o.evidence_id for o in norm.observations}
     run.limitations.extend(comps.unavailable)

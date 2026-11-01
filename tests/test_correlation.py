@@ -162,3 +162,46 @@ def test_never_more_than_two_query_rounds() -> None:
             corr.absorb(owner.answer(q, ctx), ctx, findings)
         assert rounds <= 2
     assert rounds == 2
+
+
+def test_a_failed_rival_still_allows_diagnosis() -> None:
+    """R1 keeps the gate strict, not blind: a rival whose required check FAILS is refuted."""
+    spec = CONGESTED + [("HOSTEL_UPLINK_01", "interface_errors", [10, 11, 11, 12, 12], "switch-telemetry"),
+                        ("SW_CAMPUS_4", "packet_loss_pct", [0, 0, 0.1, 0, 0], "client-probe")]   # no downstream loss
+    ctx = ctx_for(spec)
+    corr = CorrelationAgent()
+    corr.rank(ctx, [finding(ctx, "performance_agent", "link_congestion@HOSTEL_UPLINK_01", ["EV-001"]),
+                    finding(ctx, "connectivity_agent", "link_congestion@HOSTEL_UPLINK_01", ["EV-011"]),
+                    finding(ctx, "infrastructure_agent", "interface_fault@HOSTEL_UPLINK_01", ["EV-016"])])
+    rival = corr.candidates["interface_fault@HOSTEL_UPLINK_01"]
+    assert rival.refuted and not rival.unresolved
+    _, info = corr.decide(ctx, None)
+    assert info["status"] == "diagnosed" and rival not in info["alternatives"]
+
+
+def test_utilization_dipping_into_the_warn_band_is_still_sustained() -> None:
+    """A dip between warn and critical is hysteresis, not recovery (vocabulary sustained_above_critical)."""
+    ctx = ctx_for([("HOSTEL_UPLINK_01", "link_utilization_pct", [97.7, 100, 89.7, 95.7, 100], "switch-telemetry")])
+    [c] = CorrelationAgent().rank(ctx, [finding(ctx, "performance_agent", "link_congestion@HOSTEL_UPLINK_01", ["EV-001"])])
+    assert c.required[0].state == "pass"
+
+
+def test_elevated_but_unsteady_utilization_is_inconclusive_not_refuted() -> None:
+    ctx = ctx_for([("HOSTEL_UPLINK_01", "link_utilization_pct", [100, 91.9, 84.7, 70.0, 83.0], "switch-telemetry")])
+    [c] = CorrelationAgent().rank(ctx, [finding(ctx, "performance_agent", "link_congestion@HOSTEL_UPLINK_01", ["EV-001"])])
+    assert c.required[0].state == "inconclusive" and not c.refuted and c.unresolved
+
+
+def test_utilization_well_below_warn_refutes() -> None:
+    ctx = ctx_for([("HOSTEL_UPLINK_01", "link_utilization_pct", [40, 42, 39, 41, 38], "switch-telemetry")])
+    [c] = CorrelationAgent().rank(ctx, [finding(ctx, "performance_agent", "link_congestion@HOSTEL_UPLINK_01", ["EV-001"])])
+    assert c.required[0].state == "fail" and c.refuted
+
+
+def test_a_gap_ends_a_sustained_run() -> None:
+    from datetime import timedelta
+    obs = [o for o in observations([("HOSTEL_UPLINK_01", "link_utilization_pct", [95, 96, 97, 98, 99])]) if o.evidence_id != "EV-003"]
+    ctx = context(obs, REAL)
+    [c] = CorrelationAgent().rank(ctx, [finding(ctx, "performance_agent", "link_congestion@HOSTEL_UPLINK_01", ["EV-001"])])
+    assert c.required[0].state != "pass"
+    assert timedelta(minutes=2) == obs[2].observed_at - obs[1].observed_at

@@ -15,3 +15,4 @@ class NormalizationResult:
     normalization_log: list[str] = field(default_factory=list)   # e.g. "rtt_sec 0.28 -> latency_ms 280"
     validation_errors: list[str] = field(default_factory=list)   # non-empty => invalid_input report
     window_end: Optional[datetime] = None                        # incident clock; timezone-aware
+    on_demand: list[Observation] = field(default_factory=list)   # probe samples released only to answer a QUERY

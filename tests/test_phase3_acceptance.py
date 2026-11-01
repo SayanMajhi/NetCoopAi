@@ -170,3 +170,67 @@ def test_deterministic() -> None:
     a, b = run("ambiguous_congestion_errors"), run("ambiguous_congestion_errors")
     assert a.report == b.report
     assert [m.model_dump(mode="json") for m in a.messages] == [m.model_dump(mode="json") for m in b.messages]
+
+
+# --------------------------------------------------------------------------- Phase 3 review (R1, R4)
+
+
+def _r1_case() -> dict:
+    """AI 3's noise-free reproduction: utilization samples 1, 2, 5 on DEPT_UPLINK_01 missing, no throughput."""
+    fixture = load("ambiguous_congestion_errors.json")
+    i = 0
+    for record in fixture["records"]:
+        if record.get("link_id") == "DEPT_UPLINK_01" and "link_utilization_pct" in record["metrics"]:
+            if i in (0, 1, 4):
+                record["metrics"]["link_utilization_pct"] = None
+            record["metrics"].pop("throughput_mbps", None)
+            i += 1
+    fixture.pop("on_query", None)
+    return fixture
+
+
+def test_r1_unassessable_rival_blocks_diagnosis_and_is_reported() -> None:
+    report = run_incident(_r1_case(), TOPOLOGY, SIGNATURES, components=default_components(connectivity="local")).report
+    assert report.status in ("probable", "insufficient_evidence")
+    assert "link_congestion@DEPT_UPLINK_01" in report.alternative_causes
+    assert any("link_congestion@DEPT_UPLINK_01 could not be assessed" in lim and "2 of 3 required fresh samples" in lim
+               for lim in report.limitations)
+    assert any("link_congestion@DEPT_UPLINK_01" in a and "link_utilization_pct" in a for a in report.recommended_actions)
+
+
+def test_r1_alternatives_list_every_unrefuted_candidate() -> None:
+    report = run("ambiguous_congestion_errors").report
+    assert report.alternative_causes == ["interface_fault@DEPT_UPLINK_01"]
+
+
+def test_r4_query_response_cites_new_evidence() -> None:
+    fixture = load("ambiguous_congestion_errors.json")
+    comps = default_components(connectivity="local")
+    window = {o.evidence_id for o in comps.normalize(fixture, TOPOLOGY, SIGNATURES).observations}
+    result = run_incident(fixture, TOPOLOGY, SIGNATURES, components=comps)
+    responses = [m for m in result.messages if m.type == "RESPONSE" and m.sender != "connectivity_agent"]
+    assert responses
+    for r in responses:
+        new = [e for e in r.payload["evidence_ids"] if e not in window]
+        assert new, r.payload                                  # >= 1 evidence ID absent before the QUERY
+        assert "ran an on-demand" in r.payload["answer"]
+    [decision] = [m for m in result.messages if m.type == "DECISION"]
+    assert any("new on-demand probe sample" in lim for lim in decision.payload["limitations"])
+
+
+def test_r4_without_probe_data_the_response_says_it_only_re_read() -> None:
+    fixture = load("congestion.json")
+    fixture.pop("on_query")
+    result = run_incident(fixture, TOPOLOGY, SIGNATURES, components=default_components(connectivity="local"))
+    [response] = [m for m in result.messages if m.type == "RESPONSE" and m.sender != "connectivity_agent"]
+    assert "no new probe was run" in response.payload["answer"]
+    [decision] = [m for m in result.messages if m.type == "DECISION"]
+    assert any("no new probe was run" in lim for lim in decision.payload["limitations"])
+    assert result.report.status == "diagnosed"               # the fallback still works
+
+
+def test_on_query_samples_are_not_visible_before_a_query() -> None:
+    fixture = load("congestion.json")
+    norm = default_components().normalize(fixture, TOPOLOGY, SIGNATURES)
+    assert norm.on_demand and all(o.source_id == "on-demand-probe" for o in norm.on_demand)
+    assert not any(o.source_id == "on-demand-probe" for o in norm.observations)

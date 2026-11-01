@@ -72,7 +72,8 @@ class ReportingAgent(BaseAgent):
             devices = [d for d in devices if topo.knows(d)]
             segments = [s for s in segments if topo.knows(s)]
 
-        rivals = [c for c in ranked if c is not leader and c.confidence >= 0.30] if leader else []
+        # Every nominated candidate that the evidence did not refute (Phase 3 review R1).
+        rivals = list(decision.get("alternatives", []))
         alternatives = [c.hypothesis for c in rivals]
         if status == Status.diagnosed and leader:
             actions = _actions(leader, topo)
@@ -84,6 +85,8 @@ class ReportingAgent(BaseAgent):
                        "If users still report problems, collect a client-side capture with timestamps"]
         else:
             actions = _next_checks(leader)
+        for c in decision.get("unresolved", []):
+            actions.append(f"Collect the evidence needed to assess {c.hypothesis}: {'; '.join(c.unknown_reasons())}")
 
         sources = sorted({f.sender for f in findings if f.sender.endswith("_agent")} |
                          ({"correlation_agent"} if ranked else set()))

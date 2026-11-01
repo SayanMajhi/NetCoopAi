@@ -33,8 +33,15 @@ python scenarios/build_dev_fixtures.py    # rebuild the 17 labelled scenarios in
 ```
 Each run writes `reports/<incident>.json` (the report-1.0 diagnosis), `reports/<incident>.md` (the same report for humans) and `traces/<incident>.jsonl` (every message, including the QUERY/RESPONSE rounds and the HTTP bodies to and from Connectivity). Statuses: `diagnosed`, `probable`, `healthy`, `insufficient_evidence`, `invalid_input`, `failed`. Coming next: `netcoop eval` on held-out scenarios (Phase 4).
 
+### How verification works (QUERY)
+Before deciding, Correlation **verifies** the leading hypothesis (and a close rival) by sending a QUERY to the agent that owns its key measurement (e.g. utilization → Performance, interface errors → Infrastructure).
+- If the scenario has **on-demand probe samples** (`on_query` block, source `on-demand-probe`), the agent *runs the probe*: the RESPONSE cites **new evidence IDs** that did not exist before the QUERY, and Correlation grades severity (critical vs only warn) from them. Those samples grade severity only; the signature checks stay on the 5-minute window.
+- If there is no probe data, the agent **re-reads the window's samples** and says so in the RESPONSE ("no new probe was run"); the DECISION repeats it. Nothing new is claimed.
+- DNS/DHCP faults are not queried: their evidence is Connectivity's own pass/fail service checks, already in hand.
+- Confidence on `correlation_timeout` is `0.0` with method `none: correlation_failed (no heuristic-v1 score could be computed)`: no ranking was possible, and the report says so.
+
 ### How a diagnosis is decided
-Agents nominate hypotheses; the **Correlation agent** re-checks each one against its signature in `netcoop/config/signatures-1.0.yaml`, verifies the leader (and a close rival) with a **QUERY** to the agent that owns the key measurement, and scores it with **`heuristic-v1`** (`netcoop/agents/correlation.py` documents every factor). Gates: `diagnosed` needs confidence ≥ 0.70, coverage ≥ 0.75, two independent raw sources and a 0.15 lead; `probable` names what is missing; `healthy` needs normal measurements **and** passing service and path checks; otherwise the system abstains with `insufficient_evidence`. Confidence values are documented heuristics, not calibrated probabilities.
+Agents nominate hypotheses; the **Correlation agent** re-checks each one against its signature in `netcoop/config/signatures-1.0.yaml`, verifies the leader (and a close rival) with a **QUERY** to the agent that owns the key measurement, and scores it with **`heuristic-v1`** (`netcoop/agents/correlation.py` documents every factor). Gates: `diagnosed` needs confidence ≥ 0.70, coverage ≥ 0.75, two independent raw sources, a 0.15 lead **and no unresolved rival** (a hypothesis the agents raised that the evidence can neither confirm nor refute is listed in `alternative_causes` and blocks a diagnosis); `probable` names what is missing; `healthy` needs normal measurements **and** passing service and path checks; otherwise the system abstains with `insufficient_evidence`. Confidence values are documented heuristics, not calibrated probabilities.
 
 ## How it works
 | Component | Role |
