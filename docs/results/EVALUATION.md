@@ -17,6 +17,27 @@ for byte. We re-ran runs 2 and 3 on the final code with the same commands: acros
 differ. All metrics in `summary.json` are unchanged. Run 1 used the pre-fix rule and is kept as history; it cannot be
 reproduced on the current code.
 
+**Re-run after the external audit.** A later audit found that replayed polls, contradicting probes, thin `healthy` coverage and malformed messages could produce overconfident results or crashes. The fixes are listed in [ARCHITECTURE §3, §4 and §6](../../ARCHITECTURE.md). These are the current numbers; the Run 1 to Run 3 sections further down are historical. All runs are 240 cases.
+
+| Seeds, σ | exact | right cause, weaker status | abstained | wrong (stated or hedged) | false diagnosis (no-fault) |
+|---|---|---|---|---|---|
+| 6–10, σ 0 | 240 | 0 | 0 | 0 | 0 / 90 |
+| 6–10, σ 0.05 | 240 | 0 | 0 | 0 | 0 / 90 |
+| 6–10, σ 0.10 | 238 | 0 | 2 | 0 | 0 / 90 |
+| 6–10, σ 0.15 | 231 | 3 | 6 | 0 | 0 / 90 |
+| **11–15 (first used after the fixes)**, σ 0 | 240 | 0 | 0 | 0 | 0 / 90 |
+| 11–15, σ 0.05 | 240 | 0 | 0 | 0 | 0 / 90 |
+| 11–15, σ 0.10 | 235 | 2 | 3 | 0 | 0 / 90 |
+| 11–15, σ 0.15 | 231 | 3 | 6 | 0 | 0 / 90 |
+
+Seeds 1–5 at σ 0 stay 240 exact. The one change on seeds 6–10 is `link_congestion-034` at σ 0.15, where a noisy probe no longer confirms the fault, so `diagnosed` became `probable`.
+
+A first version of the `healthy` path-coverage rule counted transit devices that no scenario probes, and it turned a few healthy cases on seeds 1–10 into abstentions. We changed the denominator to the devices the complaint names. That choice was made after seeing those seeds, which is why seeds 11–15 were held back to confirm it.
+
+**Control ablation (no peer findings sent to Connectivity).** Seeds 6–10 at σ 0 and σ 0.10 give exactly the same outcomes as the normal run: 240 exact and 238 exact. On this benchmark the agent exchange changes scope findings and scores, not outcomes. We have not benchmarked a centralized design, so we claim no accuracy advantage for multiple agents.
+
+**What affected-device accuracy measures.** It checks agreement with the generator's convention, which names the fault location only. It does not validate `impact_scope`, the computed downstream set.
+
 ## How the held-out set was made
 
 - Generator: [`netcoop/evaluation/heldout.py`](../../netcoop/evaluation/heldout.py), committed in `fe2e9ee`
@@ -119,5 +140,6 @@ every σ; **0 false diagnoses**. Before the fix for this case, the AI reviewer's
 - Classes are clear-cut by construction except `busy_healthy` and `stale_telemetry`; there are no held-out
   two-fault (ambiguous) incidents. Those exist only in dev (`ambiguous_congestion_errors`).
 - `hardware_failure` and `device_overload` are not held-out classes; they are covered by unit tests only.
+- Expected statuses come from the same design assumptions as the system (source counts, clean fault ranges, prescribed signatures). Fresh seeds vary samples within that model and do not independently validate it.
 - Reproduce: `netcoop eval --n 48 --seed 6 7 8 9 10 --noise 0.10` (writes `eval/…`; deterministic). Regression fixtures
   and tests are separate from this: `scenarios/dev` was visible during development and is not accuracy evidence.

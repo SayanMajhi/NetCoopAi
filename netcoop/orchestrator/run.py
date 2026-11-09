@@ -28,7 +28,7 @@ from netcoop.normalizer.result import NormalizationResult
 from netcoop.orchestrator.bus import MessageBus
 from netcoop.orchestrator.eventlog import EventLog
 from netcoop.orchestrator.transport import ConnectivityReply, Transport, local_transport
-from netcoop.protocol.cards import CARDS
+from netcoop.protocol.cards import CARDS, EXTERNAL_SENDERS
 from netcoop.protocol.models import (
     Bundle,
     Envelope,
@@ -49,7 +49,13 @@ PERFORMANCE = "performance_agent"
 INFRASTRUCTURE = "infrastructure_agent"
 CONNECTIVITY = "connectivity_agent"
 CORRELATION = "correlation_agent"
-AGENT_DEADLINE_S = 5.0   # an in-process agent that has not answered by then is reported as AGENT_TIMEOUT
+ORCHESTRATOR = "orchestrator"
+AGENT_DEADLINE_S = 5.0   # an in-process step that has not answered by then is reported as AGENT_TIMEOUT
+CONNECTIVITY_DEADLINE_S = 30.0   # covers the HTTP client's own timeouts and its one retry
+# Who may originate each message type, whatever the message claims about itself.
+AUTHORITY = {MessageType.TASK.value: {ORCHESTRATOR}, MessageType.QUERY.value: {CORRELATION},
+             MessageType.DECISION.value: {CORRELATION}, MessageType.RESPONSE.value: set(CARDS),
+             MessageType.ERROR.value: {ORCHESTRATOR, *CARDS}, MessageType.FINDING.value: {*CARDS, *EXTERNAL_SENDERS}}
 
 Normalizer = Callable[[dict[str, Any], dict[str, Any], dict[str, Any]], NormalizationResult]
 
@@ -132,6 +138,7 @@ class _Run:
         self.conversions: list[str] = []
         self.known_evidence: Optional[set[str]] = None
         self.input_rejections: list[str] = []   # telemetry items the normalizer skipped (typed)
+        self.delivered: dict[str, Envelope] = {}   # messages that passed the context checks, by ID
 
     def deliver(self, raw: Any) -> Optional[Envelope]:
         """Every message goes through the bus; rejects are kept as typed ERRORs. A FINDING
@@ -143,6 +150,11 @@ class _Run:
         self.messages.append(accepted)
         for record in self.bus.conversions.pop(accepted.message_id, []):
             self.conversions.append(f"{accepted.message_id}: {record}")
+        problem = self._context_problem(accepted)
+        if problem is not None:
+            self.failure(accepted.sender, accepted.message_id, problem[0], problem[1], problem[2])
+            return None
+        self.delivered[accepted.message_id] = accepted
         if accepted.type == MessageType.FINDING.value:
             unknown = sorted(set(accepted.payload["evidence_ids"]) - (self.known_evidence or set()))
             if self.known_evidence is not None and unknown:
@@ -153,14 +165,40 @@ class _Run:
             self.findings.append(accepted)
         return accepted
 
-    def failure(self, recipient: str, in_reply_to: Optional[str], code: ErrorCode, detail: str) -> None:
+    def _context_problem(self, m: Envelope) -> Optional[tuple[ErrorCode, str, str]]:
+        """A schema-valid message can still be the wrong message: from another incident, from a
+        sender not allowed to say it, or answering something that was never asked."""
+        if m.sender == ORCHESTRATOR and m.type == MessageType.ERROR.value:
+            return None
+        if m.incident_id != self.incident_id:
+            return ErrorCode.INVALID_VALUE, f"belongs to incident {m.incident_id}, not {self.incident_id}", "incident_id"
+        if m.sender not in AUTHORITY[m.type]:
+            return ErrorCode.INVALID_VALUE, f"{m.sender} may not send {m.type}", "sender"
+        if m.recipient != ORCHESTRATOR and m.recipient not in CARDS:
+            return ErrorCode.UNKNOWN_RECIPIENT, f"no agent card for {m.recipient}", "recipient"
+        if m.type == MessageType.FINDING.value:
+            allowed = CARDS[m.sender].hypotheses if m.sender in CARDS else EXTERNAL_SENDERS[m.sender]
+            cause = m.payload["hypothesis"].split("@", 1)[0]
+            if cause not in allowed:
+                return ErrorCode.INVALID_VALUE, f"{m.sender} may not assert {cause}", "payload.hypothesis"
+        if m.type in (MessageType.FINDING.value, MessageType.RESPONSE.value) \
+                and (m.in_reply_to is not None or m.type == MessageType.RESPONSE.value):
+            asked = self.delivered.get(m.in_reply_to or "")
+            if asked is None or asked.recipient != m.sender \
+                    or asked.type not in (MessageType.TASK.value, MessageType.QUERY.value):
+                return ErrorCode.INVALID_VALUE, f"in_reply_to {m.in_reply_to} is not a request sent to {m.sender}", "in_reply_to"
+        return None
+
+    def failure(self, recipient: str, in_reply_to: Optional[str], code: ErrorCode, detail: str,
+                field_path: Optional[str] = None) -> None:
         """Record a component failure as an ERROR message plus a limitation."""
         n = sum(1 for m in self.messages if m.sender == "orchestrator" and m.type == MessageType.ERROR.value) + 1
         error = Envelope(
             protocol="netcoop/1.0", message_id=f"{self.incident_id}-ORCH-ERR-{n:02d}", incident_id=self.incident_id,
             in_reply_to=in_reply_to, sender="orchestrator", recipient=recipient, type=MessageType.ERROR,
             timestamp=self.clock,
-            payload=ErrorPayload(code=code, detail=detail, offending_message_id=in_reply_to).model_dump(mode="json"),
+            payload=ErrorPayload(code=code, detail=detail, field_path=field_path,
+                                 offending_message_id=in_reply_to).model_dump(mode="json"),
         )
         self.deliver(error.model_dump(mode="json"))
         self.limitations.append(f"{recipient}: {code.value}: {detail}")
@@ -174,7 +212,7 @@ def _shape_error(fixture: Any) -> Optional[str]:
     record ({timestamp, device_id, metrics, status}); field-level checks are the normalizer's."""
     if not isinstance(fixture, dict):
         return "scenario must be a JSON object"
-    if not isinstance(fixture.get("messages", []), list):
+    if not isinstance(fixture.get("messages") or [], list):
         return "'messages' must be a list"
     if "records" in fixture:
         records = fixture["records"]
@@ -210,7 +248,7 @@ def _run_incident(fixture: Any, topology: dict[str, Any], signatures: dict[str, 
         return _terminal(incident_id, Status.failed, version, limitations=comps.unavailable)
 
     try:
-        norm = comps.normalize(fixture, topology, signatures)
+        norm = _call_with_deadline("normalizer", lambda: comps.normalize(fixture, topology, signatures))
     except Exception as exc:  # a normalizer bug must still produce a report
         return _terminal(incident_id, Status.failed, version,
                          limitations=[f"normalizer failed: {type(exc).__name__}: {exc}"])
@@ -249,7 +287,7 @@ def _run_incident(fixture: Any, topology: dict[str, Any], signatures: dict[str, 
         if agent is None:
             continue
         try:
-            outputs = _call_with_deadline(agent_id, lambda: agent.handle(task, ctx))
+            outputs = _call_with_deadline(agent_id, lambda fork=ctx.fork(): agent.handle(task, fork))
             for out in outputs:
                 run.deliver(out.model_dump(mode="json"))
         except TimeoutError as exc:
@@ -267,16 +305,19 @@ def _run_incident(fixture: Any, topology: dict[str, Any], signatures: dict[str, 
     connectivity_ok = comps.connectivity is not None    # if None, comps.unavailable already says why
     if comps.connectivity is not None:
         bundle = Bundle(messages=[task, *peers], observations=norm.observations, topology=topology)
-        reply = comps.connectivity(bundle)
+        reply = _ask_connectivity(comps.connectivity, bundle)
         run.wire.append(_wire_record(reply))
         if reply.error:
             connectivity_ok = False
             code = _error_code(reply.error)
             run.failure(CONNECTIVITY, task.message_id, code, reply.error.removeprefix(f"{code.value}: "))
         delivered = [m for raw in reply.messages if (m := run.deliver(raw)) is not None]
-        if connectivity_ok and not delivered:
-            connectivity_ok = False
-            run.failure(CONNECTIVITY, task.message_id, ErrorCode.AGENT_FAILURE, "reply held no valid message")
+        for m in delivered:
+            if m.type == MessageType.ERROR.value and m.payload["code"] not in {c.value for c in PROTOCOL_ERRORS}:
+                run.limitations.append(f"{CONNECTIVITY} reported {m.payload['code']}: {m.payload['detail']}")
+        if connectivity_ok and not any(m.type != MessageType.ERROR.value for m in delivered):
+            connectivity_ok = False       # an ERROR is an answer, but it is not an analysis
+            run.failure(CONNECTIVITY, task.message_id, ErrorCode.AGENT_FAILURE, "reply held no analysis")
 
     # 3. Correlation ranks the signatures, verifies with QUERY (<= 2 rounds) and decides; one retry.
     simulate = (fixture.get("inject") or {}).get("correlation") if isinstance(fixture.get("inject"), dict) else None
@@ -297,7 +338,8 @@ def _run_incident(fixture: Any, topology: dict[str, Any], signatures: dict[str, 
     else:
         ctx.normalization_log = log
         try:
-            report = ReportingAgent().build(ctx, info, run.findings, version, run.limitations, _rejections(run))
+            report = _call_with_deadline("reporting_agent", lambda: ReportingAgent().build(
+                ctx, info, run.findings, version, run.limitations, _rejections(run)))
         except Exception as exc:  # a reporting bug must still produce a report, and keep the trace
             detail = f"reporting failed: {type(exc).__name__}: {exc}"
             report = _terminal(incident_id, Status.failed, version, limitations=[detail, *run.limitations],
@@ -305,8 +347,10 @@ def _run_incident(fixture: Any, topology: dict[str, Any], signatures: dict[str, 
     return RunResult(report=report, messages=run.messages, wire=run.wire, findings=run.findings)
 
 
-def _call_with_deadline(agent_id: str, call: Callable[[], Any]) -> Any:
-    """Run an agent call on a daemon thread; a hung agent cannot stall the incident."""
+def _call_with_deadline(agent_id: str, call: Callable[[], Any], deadline_s: Optional[float] = None) -> Any:
+    """Run one step on a daemon thread; a hung step cannot stall the incident. Python cannot cancel the
+    thread, so anything it could still write to must be a fork that is thrown away on timeout."""
+    limit = AGENT_DEADLINE_S if deadline_s is None else deadline_s
     box: dict[str, Any] = {}
 
     def target() -> None:
@@ -317,12 +361,21 @@ def _call_with_deadline(agent_id: str, call: Callable[[], Any]) -> Any:
 
     worker = threading.Thread(target=target, daemon=True)
     worker.start()
-    worker.join(AGENT_DEADLINE_S)
+    worker.join(limit)
     if worker.is_alive():
-        raise TimeoutError(f"{agent_id} did not answer within {AGENT_DEADLINE_S:g}s")
+        raise TimeoutError(f"{agent_id} did not answer within {limit:g}s")
     if "exc" in box:
         raise box["exc"]
     return box["out"]
+
+
+def _ask_connectivity(transport: Transport, bundle: Bundle) -> ConnectivityReply:
+    try:
+        return _call_with_deadline(CONNECTIVITY, lambda: transport(bundle), CONNECTIVITY_DEADLINE_S)
+    except TimeoutError as exc:
+        return ConnectivityReply(error=f"AGENT_TIMEOUT: {exc}")
+    except Exception as exc:
+        return ConnectivityReply(error=f"AGENT_FAILURE: {type(exc).__name__}: {exc}")
 
 
 def _correlate(run: _Run, ctx: IncidentContext, comps: Components, simulate: Optional[str],
@@ -333,9 +386,13 @@ def _correlate(run: _Run, ctx: IncidentContext, comps: Components, simulate: Opt
     corr = CorrelationAgent()
     # A retry must not reuse the failed attempt's message IDs: the bus would reject them as duplicates.
     corr._seq = sum(1 for m in run.messages if m.sender == CORRELATION)
-    corr.rank(ctx, run.findings)
+
+    def step(call: Callable[[], Any]) -> Any:   # Correlation only reads ctx; run state changes stay on this thread
+        return _call_with_deadline(CORRELATION, call)
+
+    step(lambda: corr.rank(ctx, list(run.findings)))
     while True:
-        queries = corr.plan_queries(ctx)
+        queries = step(lambda: corr.plan_queries(ctx))
         if not queries:
             break
         for query in queries:
@@ -345,18 +402,20 @@ def _correlate(run: _Run, ctx: IncidentContext, comps: Components, simulate: Opt
             if agent is None:
                 run.limitations.append(f"QUERY {query.payload['query_id']}: {query.recipient} unavailable")
                 continue
+            fork = ctx.fork()
             try:
-                answer = _call_with_deadline(query.recipient, lambda: agent.answer(query, ctx))
+                answer = _call_with_deadline(query.recipient, lambda: agent.answer(query, fork))
             except TimeoutError as exc:  # the check stays unverified; the decision still ships
                 run.failure(query.recipient, query.message_id, ErrorCode.AGENT_TIMEOUT, str(exc))
                 continue
             except Exception as exc:
                 run.failure(query.recipient, query.message_id, ErrorCode.AGENT_FAILURE, f"{type(exc).__name__}: {exc}")
                 continue
+            ctx.adopt(fork)
             response = run.deliver(answer.model_dump(mode="json"))
             if response is not None:
-                corr.absorb(response, ctx, run.findings)
-    decision, info = corr.decide(ctx, None, connectivity_ok=connectivity_ok)
+                step(lambda: corr.absorb(response, ctx, list(run.findings)))
+    decision, info = step(lambda: corr.decide(ctx, None, connectivity_ok=connectivity_ok))
     run.deliver(decision.model_dump(mode="json"))
     return info
 

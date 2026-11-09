@@ -135,7 +135,7 @@ def test_0_9_message_is_upgraded_with_a_visible_record() -> None:
 def test_finding_citing_unknown_evidence_is_excluded() -> None:
     fixture = load("congestion.json")
     bogus = {"protocol": "netcoop/1.0", "message_id": "INC-0103-EXT-09", "incident_id": "INC-0103", "in_reply_to": None,
-             "sender": "external_monitor", "recipient": "correlation_agent", "type": "FINDING",
+             "sender": "infrastructure_agent", "recipient": "correlation_agent", "type": "FINDING",
              "timestamp": "2026-11-01T10:05:00Z",
              "payload": {"finding_id": "F-EXT-09", "hypothesis": "hardware_failure@SW_CAMPUS_1", "stance": "supports",
                          "target_hypothesis": "hardware_failure@SW_CAMPUS_1", "evidence_ids": ["EV-999"],

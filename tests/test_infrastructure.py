@@ -100,7 +100,7 @@ def test_oper_status_down_is_hardware_failure() -> None:
 
 def test_sustained_cpu_is_device_overload() -> None:
     out = run([("SW_CAMPUS_2", "cpu_pct", [60, 92, 95, 97, 96])])
-    assert find(out, "device_overload@SW_CAMPUS_2")[0]["evidence_ids"] == ["EV-002", "EV-003", "EV-004", "EV-005"]
+    assert find(out, "device_overload@SW_CAMPUS_2")[0]["evidence_ids"] == ["EV-002", "EV-003", "EV-004"]
     assert run([("SW_CAMPUS_2", "cpu_pct", [95, 50, 96, 40, 97])]) == []   # spikes are not sustained
 
 

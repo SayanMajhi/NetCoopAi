@@ -12,7 +12,7 @@ Several causes can produce the same symptom: a saturated uplink and a failing in
 
 ## Solution
 
-Each agent owns one part of the evidence and publishes findings as protocol messages. No single component reads everything and emits a label.
+Each agent owns one part of the evidence and publishes findings as protocol messages that others can use or contest. Correlation sees all the evidence when it decides, but it can only rank causes the agents raised, and it must show the checks behind its answer.
 
 - **Performance** and **Infrastructure** analyse their own signals, and may argue against a cause as well as for it.
 - **Connectivity** runs as a separate HTTP process. It receives their findings and works out what they mean for the topology.
@@ -28,7 +28,7 @@ Each agent owns one part of the evidence and publishes findings as protocol mess
 | Evidence-based comparison of competing causes, each with supporting and contradicting findings | Dashboard, "Competing causes" |
 | Bounded verification: at most two QUERY rounds per attempt, on-demand probes when available | `scenarios/dev/ambiguous_congestion_errors.json` |
 | Contradiction and uncertainty handling: `probable` names its open rival, `insufficient_evidence` names no cause | `limitations` in every report |
-| Typed errors at every boundary; a failed component degrades the report and never crashes the run | [ARCHITECTURE.md §6](ARCHITECTURE.md#6-failure-handling), `tests/test_failure_recovery.py` |
+| Typed errors at the bus and HTTP boundaries, with incident and sender checks; a failed component degrades the report | [ARCHITECTURE.md §6](ARCHITECTURE.md#6-failure-handling), `tests/test_adversarial.py`, `tests/test_failure_recovery.py` |
 | Reproducible evaluation on a held-out generator, with every run and non-exact case archived | [docs/results/EVALUATION.md](docs/results/EVALUATION.md) |
 
 ## Architecture
@@ -68,7 +68,7 @@ python -m venv .venv
 On Windows, if `python` is not found, use `py -3.12 -m venv .venv`. Activate it with `.venv\Scripts\activate` on Windows or `source .venv/bin/activate` on macOS and Linux, then:
 
 ```bash
-pip install -e ".[dev]"
+pip install -r requirements.lock.txt -e ".[dev]"
 ```
 
 ```bash
@@ -117,7 +117,7 @@ npm --prefix dashboard run dev
 
 Go to http://localhost:5173 and select an incident. The dashboard reads the real `reports/` and `traces/`, validates each message in the browser against `schemas/`, and shows the diagnosis, competing causes, verification rounds, the message timeline and the control comparison. Reload after new runs.
 
-Without the dashboard, `reports/INC-0103.md` is the readable report and `traces/INC-0103.jsonl` is the full trace. If the server is not running, `netcoop run` warns you and the report degrades to `probable` at most. `--local` runs Connectivity in-process instead.
+Without the dashboard, `reports/INC-0103.md` is the readable report and `traces/INC-0103.jsonl` is the full trace. If the server is not running, `netcoop run` warns you and the report degrades to `probable` at most. `netcoop run` exits 0 when a report was produced, 1 for a `failed` run and 2 for `invalid_input`. `--local` runs Connectivity in-process instead.
 
 The untouched organizer output is accepted as is:
 
@@ -152,7 +152,7 @@ Output of `scenarios/dev/congestion.json` (`INC-0103`, "Hostel blocks report slo
 | `EV-079` | `queue_drops` | 2620 | +610 in one interval, at or above critical 100 | switch-telemetry |
 | `EV-120` | `latency_ms` | 220.2 ms | above critical 200 ms | client-probe |
 
-Affected: `HOSTEL_UPLINK_01`, `SW_CAMPUS_1`. Limitation stated in the report: one 5-minute window, and a heuristic score that is not a probability.
+Fault location: `HOSTEL_UPLINK_01`, `SW_CAMPUS_1`. Impact scope: the 6 devices behind it. Limitation stated in the report: one 5-minute window, and a heuristic score that is not a probability.
 
 **What the exchange changes.** With `--control`, Connectivity receives no peer findings and `F-CONN-03` does not exist. `topology_fit` falls from 1.0 to 0.5.
 
@@ -163,7 +163,7 @@ Affected: `HOSTEL_UPLINK_01`, `SW_CAMPUS_1`. Limitation stated in the report: on
 | `heuristic-v1` score | 1.00 | 0.88 |
 | Status | `diagnosed` | `diagnosed` |
 
-Of the 16 labelled scenarios that parse, the control changes the leading score in 6 and the status in none. The exchange adds scope and raises confidence on these scenarios; it does not rescue a diagnosis that would otherwise fail.
+Of the 16 labelled scenarios that parse, the control changes the leading score in 6 and the status in none. On the held-out set the control changes no outcome at σ 0 or σ 0.10. The exchange adds scope and raises scores; we have not shown that it improves accuracy, and we did not benchmark a centralized design.
 
 **When evidence conflicts.** In `ambiguous_congestion_errors` (`INC-0108`), congestion and an interface fault both pass their signatures on one uplink. Interface fault leads 0.92 to 0.90.
 
@@ -173,20 +173,20 @@ Q-01 finds the error rate reaches only the warn level, and Q-02 confirms critica
 
 | Layer | What it is | Result |
 |---|---|---|
-| Unit and integration tests | `pytest -q`, including the Connectivity service over its HTTP interface | 511 pass |
+| Unit and integration tests | `pytest -q`, including the Connectivity service over its HTTP interface | 541 pass, including `tests/test_adversarial.py` (replayed polls, contradicting probes, forged messages, omitted sensors, hung steps) |
 | Regression scenarios | 17 labelled fixtures in `scenarios/dev/`, available during development | 17/17 |
 | Held-out evaluation | `netcoop eval`: generated cases, 8 classes, 30 per class | Below |
 
-Fresh seeds 6 to 10, 240 cases per noise level. Noise is multiplicative Gaussian on gauges.
+Seeds 6 to 10, 240 cases per noise level, on the current code. Noise is multiplicative Gaussian on gauges.
 
 | | σ 0 | σ 0.05 | σ 0.10 | σ 0.15 |
 |---|---|---|---|---|
-| Exact (status and cause) | 100 % | 100 % | 99.2 % | 96.7 % |
+| Exact (status and cause) | 100 % | 100 % | 99.2 % | 96.3 % |
 | False diagnosis on no-fault classes (90 cases) | 0 | 0 | 0 | 0 |
 | Wrong cause, stated or hedged | 0 | 0 | 0 | 0 |
 | Abstained on a fault class | 0 | 0 | 2 | 6 |
-| Right cause, weaker status | 0 | 0 | 0 | 2 |
-| Affected-device accuracy, evidence-link integrity | 100 % | 100 % | 100 % | 100 % |
+| Right cause, weaker status | 0 | 0 | 0 | 3 |
+| Fault-location accuracy, evidence-link integrity | 100 % | 100 % | 100 % | 100 % |
 
 Reproduce one column with:
 
@@ -194,7 +194,9 @@ Reproduce one column with:
 netcoop eval --n 48 --seed 6 7 8 9 10 --noise 0.10
 ```
 
-**These numbers come from our own fault model.** They show that the logic holds across positions, timing and noise. They do not show how it would score on real campus telemetry or another team's fault model. There are no held-out two-fault incidents, and `hardware_failure` and `device_overload` are covered by tests only.
+Seeds 11 to 15, first used after the last logic change, give 100 %, 100 %, 97.9 % and 96.3 %, again with no wrong cause and no false diagnosis.
+
+**These numbers come from our own fault model.** Expected answers share the system's design assumptions, so they show that the logic holds across positions, timing and noise. They do not independently validate the model or predict results on real campus telemetry. There are no held-out two-fault incidents, and `hardware_failure` and `device_overload` are covered by tests only.
 
 The first held-out run found a real bug (poller jitter read as a missing sample). That run, the fix, and every non-exact case's trace are in [docs/results/EVALUATION.md](docs/results/EVALUATION.md).
 
@@ -229,10 +231,11 @@ Python 3.12 · Pydantic · FastAPI and Uvicorn · HTTPX · jsonschema · PyYAML 
 - **Confidence is not a probability.** It has not been calibrated against outcomes.
 - **The organizer generator gives one reading per call**, with no topology or labels. We show that the format is ingested, not that the system diagnoses from it.
 - **One telemetry window.** Each run is a batch over five minutes; there is no streaming or incident memory.
-- **Connectivity shares a codebase** with the other agents. It is process-separated, but only one agent runs out of process today.
+- **One remote service, not five.** Connectivity is process-separated, but it shares a codebase, and the other four agents run in-process over shared incident data.
+- **Sender identity is checked, not authenticated.** A registered name can still be forged, and a replay with fabricated new timestamps cannot be detected from the data alone.
 - **Fixed topology:** a tree from `scenarios/topology.json`; multi-homed paths are not modelled.
 
-Next steps would be replaying real SNMP and probe captures, calibrating confidence, and moving more agents behind the same HTTP contract. None of these is implemented.
+Next steps would be replaying real SNMP and probe captures, calibrating confidence, benchmarking a centralized design, and moving more agents behind the same HTTP contract. None of these is implemented.
 
 ## Team and contributions
 

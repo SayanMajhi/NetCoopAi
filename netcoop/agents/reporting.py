@@ -42,11 +42,6 @@ CAUSE_TEXT = {"link_congestion": "link congestion", "weak_wifi": "a weak Wi-Fi s
               "dns_failure": "a DNS service failure", "dhcp_failure": "a DHCP service failure",
               "hardware_failure": "a hardware failure", "upstream_dependency": "an upstream dependency failure"}
 
-# Reported confidence is the heuristic-v1 score capped by status, so the number never says more than
-# the status does: nothing from one window is certain, and a cause that missed the diagnosed gate
-# (0.70) never outscores one that passed it. The uncapped score stays in the DECISION ranking.
-CONFIDENCE_CAP = {Status.diagnosed: 0.95, Status.healthy: 0.95, Status.probable: 0.69,
-                  Status.insufficient_evidence: 0.49}
 EXCLUDED_FLAGS = ("malformed", "missing", "stale", "out_of_window")
 
 
@@ -68,10 +63,15 @@ class ReportingAgent(BaseAgent):
             confidence = decision["healthy_confidence"]
         else:
             confidence = leader.confidence if leader else 0.0
-        cap = CONFIDENCE_CAP.get(status)
+        # Reported confidence is capped by status, so the number never says more than the status does:
+        # nothing from one window is certain, and a cause that missed the diagnosed gate never outscores
+        # one that passed it. The uncapped score stays in the DECISION ranking.
+        cap = ctx.signatures["confidence"]["reported_caps"].get(Status(status).value)
+        gates = ctx.signatures["decision_gates"]
         if cap is not None and confidence > cap:
-            why = ("a cause that missed the diagnosed gate is reported below 0.70" if status == Status.probable
-                   else "an abstention is reported below the 0.50 probable gate"
+            why = (f"a cause that missed the diagnosed gate is reported below {gates['diagnosed']['min_confidence']:.2f}"
+                   if status == Status.probable
+                   else f"an abstention is reported below the {gates['probable']['min_confidence']:.2f} probable gate"
                    if status == Status.insufficient_evidence
                    else "no conclusion from one telemetry window is reported as certain")
             limitations.insert(0, f"heuristic-v1 score {confidence:.2f} reported as {cap:.2f}: {why}")
@@ -85,8 +85,10 @@ class ReportingAgent(BaseAgent):
         devices: list[str] = []
         segments: list[str] = []
         evidence: list[EvidenceItem] = []
+        impact: list[str] = []
         if named and leader:
             devices, segments = topo.affected(leader.target)
+            impact = topo.impact(leader.target)
             evidence = self._evidence(ctx, leader.passing_evidence(), limitations)
         elif status == Status.healthy:
             evidence = self._evidence(ctx, _healthy_samples(ctx), limitations)
@@ -119,7 +121,7 @@ class ReportingAgent(BaseAgent):
         return Report(
             incident_id=ctx.incident_id, status=status, suspected_root_cause=cause, confidence=confidence,
             confidence_method="heuristic-v1", signature_version=version,
-            affected_devices=devices, affected_segments=segments, supporting_evidence=evidence,
+            affected_devices=devices, affected_segments=segments, impact_scope=impact, supporting_evidence=evidence,
             agent_findings=sorted({f.payload["finding_id"] for f in findings}),
             alternative_causes=alternatives, recommended_actions=actions, evidence_sources=sources,
             limitations=_unique(limitations), normalization_log=ctx.normalization_log,
@@ -274,7 +276,9 @@ def to_markdown(report: Report) -> str:
     lines.append(f"**Confidence:** {r.confidence if r.confidence is not None else 'n/a'} ({r.confidence_method}, "
                  f"signatures {r.signature_version})")
     if r.affected_devices or r.affected_segments:
-        lines.append(f"**Affected:** {', '.join(r.affected_segments + r.affected_devices)}")
+        lines.append(f"**Fault location:** {', '.join(r.affected_segments + r.affected_devices)}  ")
+    if r.impact_scope:
+        lines.append(f"**Impact scope ({len(r.impact_scope)} devices):** {', '.join(r.impact_scope)}")
     if r.supporting_evidence:
         lines += ["", "## Evidence", "", "| ID | metric | value | per interval | meaning | source |",
                   "|---|---|---|---|---|---|"]

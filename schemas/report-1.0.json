@@ -232,6 +232,14 @@
       "title": "Evidence Sources",
       "type": "array"
     },
+    "impact_scope": {
+      "description": "Every device downstream of the fault location in the topology; affected_devices names the location only (contract-1.0.5)",
+      "items": {
+        "type": "string"
+      },
+      "title": "Impact Scope",
+      "type": "array"
+    },
     "incident_id": {
       "title": "Incident Id",
       "type": "string"

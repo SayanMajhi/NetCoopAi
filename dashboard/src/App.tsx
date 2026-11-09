@@ -76,7 +76,8 @@ function Section({ title, note, children }: { title: string; note?: string; chil
 
 function Diagnosis({ item }: { item: RunItem }) {
   const r = item.report;
-  const affected = [...(r.affected_segments ?? []), ...(r.affected_devices ?? [])];
+  const location = [...(r.affected_segments ?? []), ...(r.affected_devices ?? [])];
+  const impact = r.impact_scope ?? [];
   const w = item.wire;
   return (
     <section className="card hero">
@@ -102,7 +103,8 @@ function Diagnosis({ item }: { item: RunItem }) {
               : <span className="muted">not applicable</span>}
           </dd>
         </div>
-        <div><dt>Affected components</dt><dd>{affected.length ? affected.map((a) => <code key={a} className="chip">{a}</code>) : <span className="muted">none identified</span>}</dd></div>
+        <div><dt>Fault location</dt><dd>{location.length ? location.map((a) => <code key={a} className="chip">{a}</code>) : <span className="muted">none identified</span>}</dd></div>
+        {impact.length > 0 && <div><dt>Impact scope ({impact.length} devices)</dt><dd>{impact.map((a) => <code key={a} className="chip">{a}</code>)}</dd></div>}
         <div>
           <dt>Connectivity agent</dt>
           <dd>{!w ? <span className="muted">no call recorded</span>

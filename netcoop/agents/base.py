@@ -1,9 +1,10 @@
 """Shared agent plumbing. Agents exchange conclusions only as validated messages."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import math
+from dataclasses import dataclass, field, replace
 from datetime import datetime
-from typing import Any, Iterable, Optional
+from typing import Any, Callable, Iterable, Optional
 
 from netcoop.protocol.models import (
     PROTOCOL_VERSION,
@@ -18,7 +19,8 @@ from netcoop.protocol.models import (
 
 @dataclass
 class IncidentContext:
-    """Read-only view of one incident, handed to every agent."""
+    """One incident's data. Agents work on a fork(): the only mutation is probe(), and a fork
+    is adopted only when its agent answers in time, so a timed-out worker cannot touch the incident."""
 
     incident_id: str
     clock: datetime                       # deterministic incident time (window end), timezone-aware
@@ -34,6 +36,16 @@ class IncidentContext:
         if self.clock.tzinfo is None:
             raise ValueError("IncidentContext.clock must be timezone-aware")
         self._by_id = {o.evidence_id: o for o in self.observations}
+
+    def fork(self) -> "IncidentContext":
+        return replace(self, observations=list(self.observations), on_demand=list(self.on_demand))
+
+    def adopt(self, fork: "IncidentContext") -> None:
+        self.observations, self.on_demand, self._by_id = fork.observations, fork.on_demand, fork._by_id
+
+    def sustained_span(self) -> float:
+        """Seconds a sustained run must cover: three samples in three seconds are not persistence."""
+        return float((self.signatures.get("window") or {}).get("sustained_min_span_seconds") or 0)
 
     def probe(self, targets: list[str], metric: str) -> list[Observation]:
         """Run the on-demand probe for `metric` on the first target that has one: its samples
@@ -69,6 +81,53 @@ class IncidentContext:
 
 def _order(o: Observation) -> tuple[Any, ...]:
     return (o.observed_at, o.evidence_id)
+
+
+def numeric(o: Observation) -> Optional[float]:
+    if isinstance(o.value, bool) or o.value is None:
+        return None
+    try:
+        v = float(o.value)
+    except (TypeError, ValueError):
+        return None
+    return v if math.isfinite(v) else None
+
+
+def sample_interval(samples: list[Observation]) -> float:
+    """The polling interval, in seconds (0 if unknown): the median spacing between samples.
+    Pollers jitter (45 s, 73 s, 57 s ... for a 60 s poll); the smallest spacing would make an ordinary
+    late sample look like a missing interval (found by held-out run 1). A real gap is about 2x the median."""
+    times = sorted({o.observed_at for o in samples})
+    gaps = sorted((b - a).total_seconds() for a, b in zip(times, times[1:]) if b > a)
+    if not gaps:
+        return 0.0
+    mid = len(gaps) // 2
+    return gaps[mid] if len(gaps) % 2 else (gaps[mid - 1] + gaps[mid]) / 2
+
+
+def sustained_run(samples: list[Observation], critical: float, warn: Optional[float], need: int,
+                  min_span: float = 0.0, usable: Optional[Callable[[Observation], bool]] = None) -> list[Observation]:
+    """The first run of >= `need` samples at distinct instants above critical, covering at least
+    `min_span` seconds. A sample in the warn band (above warn, at or below critical) neither counts
+    nor ends the run; a sample at or below warn, an unusable one, or a missing interval ends it.
+    With no warn threshold every non-critical sample ends the run."""
+    run: list[Observation] = []
+    step = sample_interval(samples)
+    previous = None
+    for o in samples:
+        if o.observed_at == previous:
+            continue                       # one instant is one measurement, however often it is reported
+        if previous is not None and step and (o.observed_at - previous).total_seconds() > 1.5 * step:
+            run = []                       # a missing interval ends the run: no skipping gaps
+        previous = o.observed_at
+        v = numeric(o) if usable is None or usable(o) else None
+        if v is not None and v > critical:
+            run.append(o)
+            if len(run) >= need and (run[-1].observed_at - run[0].observed_at).total_seconds() >= min_span:
+                return run
+        elif v is None or warn is None or v <= warn:
+            run = []
+    return []
 
 
 class BaseAgent:

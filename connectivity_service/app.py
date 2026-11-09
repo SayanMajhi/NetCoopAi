@@ -42,6 +42,7 @@ from pydantic import ValidationError as ModelError
 
 from connectivity_service.logic import handle_bundle
 from netcoop.orchestrator.eventlog import EventLog
+from netcoop.protocol.cards import CARDS
 from netcoop.protocol.models import PAYLOAD_MODELS, Envelope, Observation
 
 AGENT_ID = "connectivity_agent"
@@ -50,15 +51,7 @@ SUPPORTED_MAJOR = 1
 SCHEMA_DIR = Path(__file__).resolve().parents[1] / "schemas"
 _VERSION_RE = re.compile(r"^netcoop/(\d+)\.(\d+)$")
 
-CARD: dict[str, Any] = {
-    "agent_id": AGENT_ID,
-    "endpoint": "http://127.0.0.1:8001",
-    "protocol_versions": [PROTOCOL],
-    "capabilities": ["analyze_connectivity", "interpret_peer_findings"],
-    "owned_metrics": ["dns_success", "dhcp_success", "reachability"],
-    "hypotheses": ["dns_failure", "dhcp_failure", "upstream_dependency", "healthy",
-                   "link_congestion", "interface_fault", "device_overload", "hardware_failure"],
-}
+CARD: dict[str, Any] = CARDS[AGENT_ID].model_dump()
 
 
 class _Rejected(Exception):
@@ -97,7 +90,8 @@ def _model_rejection(exc: ModelError, prefix: str, body: Any = None) -> _Rejecte
     """The typed models are stricter than Python's jsonschema in a few corners (e.g. a regex
     `$` that tolerates a trailing newline), so they run second. Map their error to a typed one."""
     error, path = exc.errors()[0], [str(p) for p in exc.errors()[0]["loc"]]
-    if isinstance(body, dict) and isinstance(body.get("payload"), dict) and body.get("type") in PAYLOAD_MODELS:
+    if isinstance(body, dict) and isinstance(body.get("payload"), dict) and isinstance(body.get("type"), str) \
+            and body["type"] in PAYLOAD_MODELS:
         try:  # payload errors surface from the Envelope's validator without a path; find it
             PAYLOAD_MODELS[body["type"]].model_validate(body["payload"])
         except ModelError as inner:
@@ -142,7 +136,7 @@ class ConnectivityService:
         evidence = {o["evidence_id"] for o in body.get("observations") or [] if isinstance(o, dict)}
         accepted: list[dict[str, Any]] = []
         for i, raw in enumerate(raw_messages):
-            message = self._accept(delivery, raw, i, evidence)
+            message = self._accept(delivery, raw, i, evidence, accepted[0] if accepted else None)
             if message is None and i == 0:  # nothing to do without a valid TASK
                 return 400, {"messages": delivery.errors}
             if message is not None:
@@ -184,14 +178,17 @@ class ConnectivityService:
                 raise _model_rejection(exc, f"observations.{i}") from exc
         return messages
 
-    def _accept(self, delivery: _Delivery, raw: Any, index: int, evidence: set[str]) -> Optional[dict[str, Any]]:
+    def _accept(self, delivery: _Delivery, raw: Any, index: int, evidence: set[str],
+                task: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
         """Validate and log messages[index]; a rejection becomes an ERROR in the reply."""
         prefix = f"messages.{index}"
         try:
             message = self._check(raw, prefix)
             if index == 0:
                 self._check_task(message, prefix)
-            elif message["type"] == "FINDING":
+            elif task is not None:
+                self._check_peer(message, task, prefix)
+            if index > 0 and message["type"] == "FINDING":
                 unknown = sorted(set(message["payload"]["evidence_ids"]) - evidence)
                 if unknown:
                     raise _Rejected("UNKNOWN_EVIDENCE", f"cites evidence not in this Bundle's observations: {unknown}",
@@ -220,7 +217,7 @@ class ConnectivityService:
                             f"{prefix}.protocol")
         message = {k: v for k, v in body.items() if k in self._envelope_fields}
         unknown = {k: v for k, v in body.items() if k not in self._envelope_fields}
-        if unknown:
+        if unknown and isinstance(body.get("extra") or {}, dict):     # a non-object `extra` fails the schema below
             message["extra"] = {**(body.get("extra") or {}), **unknown}
         error = best_match(self._message.iter_errors(message))
         if error is not None:
@@ -239,6 +236,21 @@ class ConnectivityService:
         if message["recipient"] != AGENT_ID:
             raise _Rejected("UNKNOWN_RECIPIENT", f"TASK is addressed to {message['recipient']}, not {AGENT_ID}",
                             f"{prefix}.recipient")
+
+    @staticmethod
+    def _check_peer(message: dict[str, Any], task: dict[str, Any], prefix: str) -> None:
+        """A valid message can still be the wrong one: it must belong to this incident and,
+        for a FINDING, come from a registered agent asserting a cause on that agent's card."""
+        if message["incident_id"] != task["incident_id"]:
+            raise _Rejected("INVALID_VALUE", f"belongs to incident {message['incident_id']}, not {task['incident_id']}",
+                            f"{prefix}.incident_id")
+        if message["type"] == "FINDING":
+            card = CARDS.get(message["sender"])
+            if card is None:
+                raise _Rejected("INVALID_VALUE", f"{message['sender']} is not a registered agent", f"{prefix}.sender")
+            cause = message["payload"]["hypothesis"].split("@", 1)[0]
+            if cause not in card.hypotheses:
+                raise _Rejected("INVALID_VALUE", f"{message['sender']} may not assert {cause}", f"{prefix}.payload.hypothesis")
 
     # ----------------------------------------------------------------- replies
 

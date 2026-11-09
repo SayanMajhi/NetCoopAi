@@ -6,8 +6,7 @@ import math
 from collections import defaultdict
 from datetime import timedelta
 
-from netcoop.agents.base import BaseAgent, IncidentContext
-from netcoop.agents.correlation import _sample_interval
+from netcoop.agents.base import BaseAgent, IncidentContext, sustained_run
 from netcoop.protocol.models import Envelope, MessageType, Observation
 
 _BAD = {"missing", "stale", "out_of_window", "malformed", "counter_reset"}
@@ -85,22 +84,8 @@ def _streak(samples: list[Observation], ctx: IncidentContext, minutes: float,
             critical: float, minimum: int) -> list[Observation]:
     """`minimum` samples above critical in one run; a dip into the warn band does not end the run
     (signatures vocabulary `sustained_above_critical`), a sample at or below warn or a stale one does."""
-    warn = _limit(ctx, "link_utilization_pct", "warn")
-    step = _sample_interval(samples)   # median spacing: poller jitter is not a missing interval
-    consecutive: list[Observation] = []
-    previous = None
-    for obs in samples:
-        if previous is not None and step and (obs.observed_at - previous).total_seconds() > 1.5 * step:
-            consecutive.clear()            # a missing interval ends the run
-        previous = obs.observed_at
-        fresh = _fresh(ctx, obs, minutes)
-        if fresh and obs.value > critical:
-            consecutive.append(obs)
-            if len(consecutive) >= minimum:
-                return consecutive[-minimum:]
-        elif not fresh or warn is None or obs.value <= warn:
-            consecutive.clear()
-    return []
+    return sustained_run(samples, critical, _limit(ctx, "link_utilization_pct", "warn"), minimum,
+                         ctx.sustained_span(), usable=lambda o: _fresh(ctx, o, minutes))
 
 
 def _throughput_context(ctx: IncidentContext, target: str, minutes: float) -> tuple[str, list[str]]:

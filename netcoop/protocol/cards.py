@@ -20,6 +20,13 @@ class AgentCard(BaseModel):
 
 V = [f"netcoop/{SCHEMA_VERSION}"]
 
+# Non-agent sources allowed to send FINDINGs, with the causes each may assert. Sender identity is
+# checked against these lists but not authenticated.
+EXTERNAL_SENDERS: dict[str, list[str]] = {
+    "external_monitor": ["link_congestion"],
+    "legacy_switch_monitor": ["interface_fault"],
+}
+
 # owned_metrics match data/field_mapping.md; tests/test_signatures.py and tests/test_examples.py check them.
 CARDS: dict[str, AgentCard] = {
     c.agent_id: c

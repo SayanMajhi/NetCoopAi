@@ -6,7 +6,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-from netcoop.normalizer.adapter_generator import load_raw
 from netcoop.normalizer.normalize import normalize
 
 
@@ -77,10 +76,6 @@ class NormalizeTests(unittest.TestCase):
                 self.assertEqual([], result.validation_errors)
                 self.assertEqual(len(raw["metrics"]), len(result.observations))
                 self.assertEqual(raw["timestamp"], result.window_end.isoformat().replace("+00:00", "Z"))
-                adapter_rows = load_raw(path)
-                self.assertEqual(len(raw["metrics"]), len(adapter_rows))
-                self.assertTrue(all(row["original_value"] == raw["metrics"][row["original_field"].removeprefix("metrics.")]
-                                    for row in adapter_rows))
 
     def test_utilization_cross_check_flags_only_a_verdict_disagreement(self):
         fixture = {"window_end": "2026-11-01T10:05:00Z", "records": [
@@ -125,11 +120,10 @@ class NormalizeTests(unittest.TestCase):
             {"timestamp": "2026-11-01T10:04:00Z", "link_id": "HOSTEL_UPLINK_01",
              "source_id": "switch-telemetry", "metrics": {"throughput_kbps": 960000}},
         ]}
-        with patch.object(Path, "read_text", return_value=json.dumps(fixture)):
-            rows = load_raw("fixture.json")
-        self.assertEqual(960, rows[0]["value"])
-        self.assertEqual("HOSTEL_UPLINK_01", rows[0]["link_id"])
-        self.assertEqual("switch-telemetry", rows[0]["source_id"])
+        observation = next(o for o in normalize(fixture, TOPOLOGY, SIGNATURES).observations if o.metric == "throughput_mbps")
+        self.assertEqual(960, observation.value)
+        self.assertEqual("HOSTEL_UPLINK_01", observation.link_id)
+        self.assertEqual("switch-telemetry", observation.source_id)
 
 
 if __name__ == "__main__":

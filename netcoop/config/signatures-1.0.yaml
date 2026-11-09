@@ -3,7 +3,7 @@ version: "1.0"
 window:
   minutes: 5
   congestion_min_consecutive_samples: 3
-  sparse_samples_reduce_coverage: true
+  sustained_min_span_seconds: 60   # a sustained run must cover at least this long, however many samples it has
 
 rssi:
   grey_zone_dbm:
@@ -140,11 +140,13 @@ utilization_cross_check:
   rationale: "Measured link_utilization_pct and throughput/capacity come from different counters and polling instants, so a few points of disagreement is normal. Beyond tolerance_points the mismatch is logged but the measured value is kept. It is marked malformed only when the two disagree about the verdict (one above critical while the other is at or below warn). A throughput/capacity ratio above max_throughput_ratio_pct is physically impossible, so the cross-check is skipped and logged rather than trusted. Revised in Phase 3 review (R2): discarding agreeing evidence made congestion unassessable under mild noise."
 
 healthy_coverage:
-  require_fresh_performance_measurements: true
-  require_fresh_infrastructure_measurements: true
-  require_relevant_service_checks: true
-  require_relevant_path_checks: true
-  allow_unresolved_major_contradictions: false
+  # The inventory a healthy verdict needs. A category that is absent stays unknown; it never counts as normal.
+  performance_metrics: [link_utilization_pct, latency_ms]
+  device_metrics: [cpu_pct, memory_pct]
+  counter_metrics: [queue_drops, interface_errors]
+  service_checks: [dns_success, dhcp_success]
+  min_clients_per_service: 2
+  min_path_fraction: 0.5
 
 confidence:
   method: heuristic-v1
@@ -153,8 +155,11 @@ confidence:
   time_fit_weight: 0.20
   independent_source_fit_weight: 0.15
   contradiction_penalty: 0.15
-  multiply_by_coverage: true
-  deduplicate_by_evidence_id: true
+  reported_caps: {diagnosed: 0.95, healthy: 0.95, probable: 0.69, insufficient_evidence: 0.49}
+
+verification:
+  max_query_rounds: 2
+  runner_up_within: 0.15
 
 decision_gates:
   diagnosed:
@@ -164,20 +169,3 @@ decision_gates:
     min_lead_over_runner_up: 0.15
   probable:
     min_confidence: 0.50
-    require_named_limitation_or_rival: true
-  insufficient_evidence:
-    when_below_probable_gate: true
-    when_major_contradiction_unresolved: true
-
-evaluation_rules:
-  required_list: all_checks_must_pass
-  any_of: at_least_one_check_must_pass
-  corroborating: at_least_min_matches_must_pass
-  scope: same_incident_and_relevant_topology_scope
-  time: checks_must_use_the_configured_window
-  missing_or_stale: unknown_not_false
-  null_threshold: check_unavailable
-  coverage:
-    numerator: fresh_valid_required_checks
-    denominator: applicable_required_checks
-    missing_required_checks_count_in_denominator: true

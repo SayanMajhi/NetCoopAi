@@ -74,7 +74,7 @@ def _evidence_integrity(case: Case, result: Any, topology: dict, signatures: dic
 
 
 def evaluate(n: int, seeds: list[int], sigma: float = 0.0, out: Path | None = None,
-             endpoint: str | None = None) -> dict[str, Any]:
+             endpoint: str | None = None, control: bool = False) -> dict[str, Any]:
     from netcoop.orchestrator.run import default_components, load_signatures, load_topology, run_incident, write_outputs
 
     topology, signatures = load_topology(), load_signatures()
@@ -86,7 +86,7 @@ def evaluate(n: int, seeds: list[int], sigma: float = 0.0, out: Path | None = No
         for case in generate(n, seed):
             if sigma:
                 case.fixture = add_noise(case.fixture, sigma, case.seed)
-            result = run_incident(case.fixture, topology, signatures, components=components)
+            result = run_incident(case.fixture, topology, signatures, components=components, control=control)
             r = result.report
             cause = r.suspected_root_cause.split("@")[0] if r.suspected_root_cause else None
             got_ids = set(r.affected_devices) | set(r.affected_segments)

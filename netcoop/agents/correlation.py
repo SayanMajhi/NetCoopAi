@@ -25,12 +25,15 @@ heuristic-v1 (ARCHITECTURE.md §4), every factor in [0, 1]:
 - contradiction_strength = 1 if a signature contradicting check passes, else the highest
   score of a contradicts FINDING aimed at the hypothesis (0.5 when it has no score), else 0.
 
+The weights, gates and QUERY limits are read from signatures-1.0.yaml; the values above and below
+are the shipped ones.
+
 Gates: diagnosed = all required checks pass, confidence >= 0.70, coverage >= 0.75,
-independent_source_fit == 1, a lead >= 0.15 over the runner-up and an answer from Connectivity;
-probable = confidence >= 0.50 with the reason it is not diagnosed named; healthy = no candidate passes all its
-required checks, and fresh normal performance + infrastructure measurements, passing
-service checks and passing path checks, with no missing/stale data; else
-insufficient_evidence.
+independent_source_fit == 1, a lead >= 0.15 over the runner-up, a verification that did not
+contradict the leader, and an answer from Connectivity; probable = confidence >= 0.50 with the
+reason it is not diagnosed named; healthy = no candidate passes all its required checks, the
+expected inventory in healthy_coverage is fresh and normal, with passing service and path checks
+and no missing/stale data; else insufficient_evidence.
 """
 from __future__ import annotations
 
@@ -41,7 +44,9 @@ from datetime import timedelta
 from statistics import median
 from typing import Any, Iterable, Optional
 
-from netcoop.agents.base import BaseAgent, IncidentContext
+from netcoop.agents.base import BaseAgent, IncidentContext, sustained_run
+from netcoop.agents.base import numeric as _num
+from netcoop.agents.base import sample_interval as _sample_interval  # noqa: F401  (part of this module's API)
 from netcoop.protocol.cards import CARDS
 from netcoop.protocol.models import (
     DecisionPayload,
@@ -62,8 +67,7 @@ INFRA_METRICS = {"cpu_pct", "memory_pct", "queue_drops", "interface_errors", "li
 # The measurement a QUERY verifies for each cause (owned by an in-process agent).
 KEY_MEASUREMENT = {"link_congestion": "link_utilization_pct", "interface_fault": "interface_errors",
                    "weak_wifi": "rssi_dbm", "device_overload": "cpu_pct", "hardware_failure": "interface_oper_status"}
-MAX_QUERY_ROUNDS = 2
-CLOSE = 0.15
+NOT_CONFIRMED = 0.3      # a verified severity at or below this means the probe did not confirm the cause
 
 
 @dataclass
@@ -90,6 +94,8 @@ class Candidate:
     corroboration_need: str = ""   # e.g. "queue_drops rising >= 10/interval or latency above 100 ms"
     severity: float = 0.5
     verified: Optional[str] = None
+    not_confirmed: bool = False    # an on-demand probe measured the key metric and did not find the fault
+    min_coverage: float = 0.75     # decision_gates.diagnosed.min_coverage
     factors: dict[str, float] = field(default_factory=dict)
     coverage: float = 0.0
     confidence: float = 0.0
@@ -119,7 +125,7 @@ class Candidate:
     @property
     def unassessed(self) -> bool:
         """Not refuted, but too little fresh evidence to judge it."""
-        return not self.refuted and self.coverage < 0.75 and any(c.state == "unknown" for c in self.required)
+        return not self.refuted and self.coverage < self.min_coverage and any(c.state == "unknown" for c in self.required)
 
     @property
     def unresolved(self) -> bool:
@@ -169,6 +175,10 @@ class _Topo:
     def servers(self, service: str) -> list[str]:
         return sorted(n for n, node in self.nodes.items() if service in (node.get("services") or []))
 
+    def impact(self, target: str) -> list[str]:
+        """Every device a fault on `target` can reach: behind a link, or a device and what hangs off it."""
+        return sorted({*self.downstream(target), *([] if target in self.links else [target])})
+
     def affected(self, target: str) -> tuple[list[str], list[str]]:
         """(affected_devices, affected_segments) for a fault on `target`."""
         if target in self.links:
@@ -177,16 +187,6 @@ class _Topo:
 
 
 # --------------------------------------------------------------------------- evidence helpers
-
-
-def _num(o: Observation) -> Optional[float]:
-    if isinstance(o.value, bool) or o.value is None:
-        return None
-    try:
-        v = float(o.value)
-    except (TypeError, ValueError):
-        return None
-    return v if math.isfinite(v) else None
 
 
 def _bool(o: Observation) -> Optional[bool]:
@@ -255,6 +255,7 @@ class CorrelationAgent(BaseAgent):
             if p["stance"] == Stance.contradicts.value and p.get("target_hypothesis") in self.candidates:
                 self.candidates[p["target_hypothesis"]].contradicting.append(f)
         for cand in self.candidates.values():
+            cand.min_coverage = ctx.signatures["decision_gates"]["diagnosed"]["min_coverage"]
             self._evaluate(cand, sigs[cand.cause], ctx, topo, ev)
             self._score(cand, ctx, topo, ev, findings)
         return self.ranking()
@@ -352,15 +353,18 @@ class CorrelationAgent(BaseAgent):
 
         sources = {o.source_id for o in used}
         kinds = {o.metric for o in used}
-        independent = 1.0 if len(sources) >= 2 else (0.5 if len(kinds) >= 2 else 0.0)
+        min_sources = ctx.signatures["decision_gates"]["diagnosed"]["min_independent_raw_sources"]
+        independent = 1.0 if len(sources) >= min_sources else (0.5 if len(kinds) >= 2 else 0.0)
 
         contra = 1.0 if any(c.state == "pass" for c in cand.contradicting_checks) else 0.0
         if not contra and cand.contradicting:
             contra = max(f.payload.get("score") if f.payload.get("score") is not None else 0.5
                          for f in _dedupe(cand.contradicting))
 
-        raw = max(0.0, min(1.0, 0.40 * signal + 0.25 * topology + 0.20 * time_fit
-                             + 0.15 * independent - 0.15 * contra))
+        w = ctx.signatures["confidence"]
+        raw = max(0.0, min(1.0, w["signal_fit_weight"] * signal + w["topology_fit_weight"] * topology
+                             + w["time_fit_weight"] * time_fit + w["independent_source_fit_weight"] * independent
+                             - w["contradiction_penalty"] * contra))
         cand.factors = {"signal_fit": round(signal, 3), "topology_fit": topology, "time_fit": round(time_fit, 3),
                         "independent_source_fit": independent, "contradiction_strength": round(contra, 3),
                         "coverage": round(cand.coverage, 3), "severity": cand.severity}
@@ -370,7 +374,8 @@ class CorrelationAgent(BaseAgent):
 
     def plan_queries(self, ctx: IncidentContext) -> list[Envelope]:
         """Round 1 verifies the leader; round 2 the runner-up when it is within 0.15. Max 2 rounds."""
-        if self.rounds >= MAX_QUERY_ROUNDS:
+        limits = ctx.signatures["verification"]
+        if self.rounds >= limits["max_query_rounds"]:
             return []
         order = [c for c in self.ranking() if c.cause in KEY_MEASUREMENT and c.verified is None]
         if not order:
@@ -380,7 +385,7 @@ class CorrelationAgent(BaseAgent):
             pick = order[0]
         else:
             leader = ranked[0]
-            close = [c for c in order if c is not leader and leader.confidence - c.confidence < CLOSE]
+            close = [c for c in order if c is not leader and leader.confidence - c.confidence < limits["runner_up_within"]]
             if not close:
                 return []
             pick = close[0]
@@ -407,6 +412,7 @@ class CorrelationAgent(BaseAgent):
         evidence = [o for e in response.payload.get("evidence_ids") or [] if (o := ctx.evidence(e)) is not None]
         cand.severity, cand.verified = _severity(cand.cause, evidence, ctx)
         fresh = [o for o in evidence if o.source_id.startswith("on-demand")]
+        cand.not_confirmed = bool(fresh) and cand.severity <= NOT_CONFIRMED
         cand.verified += (f"; from {len(fresh)} new on-demand probe sample(s)" if fresh else
                           "; no new probe was run: the window's own samples were re-read to grade severity")
         topo, ev = _Topo(ctx.topology), _Evidence(ctx)
@@ -421,6 +427,7 @@ class CorrelationAgent(BaseAgent):
                connectivity_ok: bool = True) -> tuple[Envelope, dict[str, Any]]:
         """The DECISION message plus what Reporting needs (status, leader, rivals, reasons).
         Without a Connectivity answer nobody judged scope or paths, so neither `diagnosed` nor `healthy`."""
+        gates = ctx.signatures["decision_gates"]
         ranked = self.ranking()
         leader = ranked[0] if ranked else None
         rival = ranked[1] if len(ranked) > 1 else None
@@ -445,21 +452,22 @@ class CorrelationAgent(BaseAgent):
                                f"{rival.factors['signal_fit']})")
 
         corroborated = bool(leader) and leader.corroboration_met and not leader.refuted
-        if corroborated and leader.required_pass and leader.confidence >= 0.70 and leader.coverage >= 0.75 \
-                and leader.factors["independent_source_fit"] == 1.0 and lead >= CLOSE and not unresolved \
-                and connectivity_ok:
+        if corroborated and leader.required_pass and leader.confidence >= gates["diagnosed"]["min_confidence"] \
+                and leader.coverage >= gates["diagnosed"]["min_coverage"] \
+                and leader.factors["independent_source_fit"] == 1.0 and lead >= gates["diagnosed"]["min_lead_over_runner_up"] \
+                and not unresolved and not leader.not_confirmed and connectivity_ok:
             status = Status.diagnosed
         elif healthy:
             status = Status.healthy
             limitations += healthy_notes
-        elif corroborated and leader.confidence >= 0.50:
+        elif corroborated and leader.confidence >= gates["probable"]["min_confidence"]:
             status = Status.probable
-            limitations += _not_diagnosed(leader, rival, lead, connectivity_ok)
+            limitations += _not_diagnosed(leader, rival, lead, connectivity_ok, gates)
         else:
             status = Status.insufficient_evidence
             limitations += healthy_notes
             if leader:
-                limitations += _not_diagnosed(leader, rival, lead, connectivity_ok)
+                limitations += _not_diagnosed(leader, rival, lead, connectivity_ok, gates)
             else:
                 limitations.append("no fault hypothesis was nominated with evidence; heuristic-v1 confidence 0.0")
         ranking = [RankedCause(hypothesis=c.hypothesis, confidence=c.confidence, coverage=round(c.coverage, 2),
@@ -524,10 +532,10 @@ def _judge(check: str, metric: str, series: dict[str, list[Observation]], th: di
     if check == "sustained_above_critical":
         need = (ctx.signatures.get("window") or {}).get("congestion_min_consecutive_samples", 3)
         for s in series.values():
-            run = sustained_run(s, limit, warn, need)
+            run = sustained_run(s, limit, warn, need, ctx.sustained_span())
             if run:
                 return "pass", run
-        if not any(len(s) >= need for s in series.values()):
+        if not any(len({o.observed_at for o in s}) >= need for s in series.values()):
             return "unknown", []
         # No sustained run. Refute only if the link is not even elevated; utilization that keeps
         # returning above warn without a clean critical run is inconclusive, not evidence against.
@@ -543,39 +551,6 @@ def _judge(check: str, metric: str, series: dict[str, list[Observation]], th: di
     if check == "below_warn":
         return ("pass" if all(_num(o) <= limit for o in latest) else "fail"), latest
     return "unknown", []
-
-
-def sustained_run(samples: list[Observation], critical: float, warn: Optional[float], need: int) -> list[Observation]:
-    """The first run with >= `need` samples above critical. A sample in the warn band (above warn,
-    at or below critical) neither counts nor ends the run; a sample at or below warn, or a
-    missing one, ends it. With no warn threshold every non-critical sample ends the run."""
-    run: list[Observation] = []
-    step = _sample_interval(samples)
-    previous = None
-    for o in samples:
-        if previous is not None and step and (o.observed_at - previous).total_seconds() > 1.5 * step:
-            run = []                       # a missing interval ends the run: no skipping gaps
-        previous = o.observed_at
-        v = _num(o)
-        if v is not None and v > critical:
-            run.append(o)
-            if len(run) >= need:
-                return run
-        elif v is None or warn is None or v <= warn:
-            run = []
-    return []
-
-
-def _sample_interval(samples: list[Observation]) -> float:
-    """The polling interval, in seconds (0 if unknown): the median spacing between samples.
-    Pollers jitter (45 s, 73 s, 57 s ... for a 60 s poll); the smallest spacing would make an ordinary
-    late sample look like a missing interval (found by held-out run 1). A real gap is about 2x the median."""
-    times = sorted({o.observed_at for o in samples})
-    gaps = sorted((b - a).total_seconds() for a, b in zip(times, times[1:]) if b > a)
-    if not gaps:
-        return 0.0
-    mid = len(gaps) // 2
-    return gaps[mid] if len(gaps) % 2 else (gaps[mid - 1] + gaps[mid]) / 2
 
 
 def _severity(cause: str, evidence: list[Observation], ctx: IncidentContext) -> tuple[float, str]:
@@ -604,10 +579,14 @@ def _severity(cause: str, evidence: list[Observation], ctx: IncidentContext) -> 
     if cause == "weak_wifi" and values:
         zone = (ctx.signatures.get("rssi") or {}).get("grey_zone_dbm") or {}
         signal = median(values)
+        if signal >= zone.get("upper_exclusive", -67):
+            return 0.1, f"median RSSI {signal:g} dBm is not weak"
         return (1.0, f"median RSSI {signal:g} dBm is weak") if signal <= zone.get("lower_exclusive", -75) else \
             (0.5, f"median RSSI {signal:g} dBm is in the grey zone")
     if cause == "device_overload" and critical is not None and values:
         above = sum(v > critical for v in values)
+        if not above:
+            return 0.2, f"no CPU sample above {critical:g}%"
         return (1.0, f"{above}/{len(values)} CPU samples above {critical:g}%") if above >= 3 else \
             (0.4, f"{above}/{len(values)} CPU samples above {critical:g}%")
     if cause == "hardware_failure":
@@ -651,8 +630,10 @@ def _area(ctx: IncidentContext) -> tuple[Optional[set[str]], list[str]]:
 
 
 def _healthy(ctx: IncidentContext, ranked: list[Candidate]) -> tuple[bool, float, list[str]]:
-    """The healthy gate (ARCHITECTURE §4): explicit normal measurements and passing checks."""
+    """The healthy gate (ARCHITECTURE §4): the expected inventory, measured, fresh and normal."""
     ev = _Evidence(ctx)
+    expected = ctx.signatures["healthy_coverage"]
+    topo = _Topo(ctx.topology)
     notes: list[str] = []
     area, named = _area(ctx)
     stale = [o for o in ev.stale if area is None or (o.device_id or o.link_id) in area]
@@ -661,6 +642,16 @@ def _healthy(ctx: IncidentContext, ranked: list[Candidate]) -> tuple[bool, float
     infra = [o for o in ev.fresh if o.metric in INFRA_METRICS]
     services = [o for o in ev.fresh if o.metric in ("dns_success", "dhcp_success")]
     paths = [o for o in ev.fresh if o.metric == "reachability"]
+    present = {o.metric for o in ev.fresh}
+    absent = [m for m in expected["performance_metrics"] + expected["device_metrics"] + expected["counter_metrics"]
+              if m not in present]
+    servers = set(topo.servers("dns")) | set(topo.servers("dhcp"))
+    thin = [m for m in expected["service_checks"]
+            if len({o.device_id for o in services if o.metric == m and o.device_id not in servers})
+            < expected["min_clients_per_service"]]
+    scope_nodes = set(topo.nodes) if area is None else set(named)  # transit devices are not what was asked about
+    checked = {o.device_id for o in paths} & scope_nodes
+    path_share = len(checked) / len(scope_nodes) if scope_nodes else 0.0
     perf_normal = bool(perf) and all(
         (v := _num(o)) is None or ctx.threshold(o.metric).get("warn") is None
         or o.metric == "throughput_mbps" or v <= ctx.threshold(o.metric)["warn"] for o in perf)
@@ -672,15 +663,21 @@ def _healthy(ctx: IncidentContext, ranked: list[Candidate]) -> tuple[bool, float
         ("no missing or stale data" if area is None else
          f"no missing or stale data in the area in question ({', '.join(named)} and its path)"): not stale,
         "no candidate passes all its required checks": not any(c.required_pass for c in ranked),
+        f"expected telemetry present (absent: {', '.join(absent) or 'none'})": not absent,
+        f"expected service checks on at least {expected['min_clients_per_service']} clients "
+        f"(too few: {', '.join(thin) or 'none'})": not thin,
+        f"expected path checks on at least {expected['min_path_fraction']:.0%} of the devices in scope "
+        f"({len(checked)} of {len(scope_nodes)})": path_share >= expected["min_path_fraction"],
     }
     for name, ok in conditions.items():
         if not ok:
             notes.append(f"healthy not shown: {name} — not met")
     met = sum(conditions.values()) / len(conditions)
     sources = {o.source_id for o in perf + infra + services + paths}
-    raw = 0.40 * (1.0 if perf_normal else 0.0) + 0.25 * (1.0 if paths and conditions[
-        "path checks (reachability) present and passing"] else 0.0) + 0.20 * (0.0 if stale else 1.0) \
-        + 0.15 * (1.0 if len(sources) >= 2 else 0.0)
+    w = ctx.signatures["confidence"]
+    raw = w["signal_fit_weight"] * (1.0 if perf_normal else 0.0) + w["topology_fit_weight"] * (1.0 if paths and conditions[
+        "path checks (reachability) present and passing"] else 0.0) + w["time_fit_weight"] * (0.0 if stale else 1.0) \
+        + w["independent_source_fit_weight"] * (1.0 if len(sources) >= 2 else 0.0)
     ok = all(conditions.values())
     if ctx.input_warnings:      # a skipped or mis-scaled reading may be exactly where the fault is
         ok = False
@@ -692,8 +689,13 @@ def _healthy(ctx: IncidentContext, ranked: list[Candidate]) -> tuple[bool, float
     return ok, round(raw * met, 2), notes
 
 
-def _not_diagnosed(leader: Candidate, rival: Optional[Candidate], lead: float, connectivity_ok: bool = True) -> list[str]:
+def _not_diagnosed(leader: Candidate, rival: Optional[Candidate], lead: float, connectivity_ok: bool,
+                   gates: dict[str, Any]) -> list[str]:
+    diagnosed = gates["diagnosed"]
     out = []
+    if leader.not_confirmed:
+        out.append(f"{leader.hypothesis}: verification did not confirm it ({leader.verified}); the window evidence and "
+                   "the probe disagree, so the fault may have cleared or the evidence may be wrong")
     if leader.refuted:
         out.append(f"{leader.hypothesis}: ruled out by a contradicting measurement: "
                    f"{', '.join(c.name for c in leader.contradicting_checks if c.state == 'pass') or 'a required check failed'}")
@@ -702,14 +704,14 @@ def _not_diagnosed(leader: Candidate, rival: Optional[Candidate], lead: float, c
     unmet = [c.name for c in leader.required if c.state != "pass"]
     if unmet:
         out.append(f"{leader.hypothesis}: required check(s) not met: {', '.join(unmet)}")
-    if leader.coverage < 0.75:
-        out.append(f"{leader.hypothesis}: coverage {leader.coverage:.2f} < 0.75")
+    if leader.coverage < diagnosed["min_coverage"]:
+        out.append(f"{leader.hypothesis}: coverage {leader.coverage:.2f} < {diagnosed['min_coverage']:.2f}")
     if leader.factors.get("independent_source_fit", 0) < 1.0:
         out.append(f"{leader.hypothesis}: evidence from fewer than two independent raw sources")
-    if rival and lead < CLOSE:
+    if rival and lead < diagnosed["min_lead_over_runner_up"]:
         out.append(f"unresolved rival {rival.hypothesis} within {lead:.2f} of {leader.hypothesis}")
-    if leader.confidence < 0.70:
-        out.append(f"{leader.hypothesis}: confidence {leader.confidence:.2f} < 0.70")
+    if leader.confidence < diagnosed["min_confidence"]:
+        out.append(f"{leader.hypothesis}: confidence {leader.confidence:.2f} < {diagnosed['min_confidence']:.2f}")
     if not out and connectivity_ok:
         out.append(f"{leader.hypothesis}: not diagnosed while an unassessed rival remains open")
     return out

@@ -14,7 +14,7 @@ from __future__ import annotations
 from statistics import median
 from typing import Any, Optional
 
-from netcoop.agents.base import BaseAgent, IncidentContext
+from netcoop.agents.base import BaseAgent, IncidentContext, sustained_run
 from netcoop.protocol.models import Envelope, Observation, QualityFlag, Stance
 
 RECIPIENT = "correlation_agent"
@@ -54,19 +54,6 @@ def level(value: float, threshold: dict[str, Any]) -> str:
     if warn is not None and value > warn:
         return "warn"
     return "normal" if warn is not None else "unknown"
-
-
-def sustained_above(samples: list[tuple[Observation, float]], limit: Optional[float], run: int) -> list[str]:
-    """Evidence IDs of the longest run above `limit`, if it is at least `run` samples long."""
-    if limit is None:
-        return []
-    best: list[str] = []
-    current: list[str] = []
-    for o, v in samples:
-        current = current + [o.evidence_id] if v > limit else []
-        if len(current) > len(best):
-            best = current
-    return best if len(best) >= run else []
 
 
 def counter_deltas(observations: list[Observation]) -> tuple[list[tuple[float, list[str]]], list[str]]:
@@ -146,8 +133,9 @@ class InfrastructureAgent(BaseAgent):
         cited: list[str] = []
         parts: list[str] = []
         for metric in ("cpu_pct", "memory_pct"):
-            samples = numeric_samples(ctx.for_target(target, metric))
-            ids = sustained_above(samples, ctx.threshold(metric).get("critical"), run)
+            critical = ctx.threshold(metric).get("critical")
+            samples = [o for o, _ in numeric_samples(ctx.for_target(target, metric))]
+            ids = [] if critical is None else [o.evidence_id for o in sustained_run(samples, critical, None, run, ctx.sustained_span())]
             if ids:
                 cited += ids
                 parts.append(f"{metric} above {ctx.threshold(metric)['critical']} for {len(ids)} consecutive samples")

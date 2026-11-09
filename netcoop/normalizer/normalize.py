@@ -248,6 +248,7 @@ def _normalize_window(fixture: dict, topology: dict, signatures: dict) -> Normal
         if not start <= row["observed_at"] <= result.window_end:
             row["quality_flags"] = [f for f in row["quality_flags"] if f != "ok"] + ["stale", "out_of_window"]
             result.normalization_log.append(f"{row['_target']} {row['metric']} at {row['observed_at'].isoformat()}: outside incident window")
+    _reconcile_duplicates(rows, result)
     _utilization(rows, link_by_id, result.normalization_log, signatures)
     _counter_resets(rows, result.normalization_log)
     _fraction_utilization(rows, result)
@@ -261,6 +262,31 @@ def _normalize_window(fixture: dict, topology: dict, signatures: dict) -> Normal
     if result.validation_errors:
         result.observations.clear()
     return result
+
+
+def _reconcile_duplicates(rows: list[dict[str, Any]], result: NormalizationResult) -> None:
+    """One source reporting one metric twice at one instant is one measurement, not two. Exact copies
+    collapse to the first; readings that disagree cannot both be right, so none of them is used."""
+    groups: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
+    for row in rows:
+        groups.setdefault((row["_target"], row["metric"], row["source_id"], row["observed_at"]), []).append(row)
+    dropped: set[int] = set()
+    for (target, metric, source, observed_at), group in groups.items():
+        if len(group) < 2:
+            continue
+        where = f"{target} {metric} from {source} at {observed_at.isoformat()}"
+        values = [row["value"] for row in group]
+        if all(v == values[0] for v in values):
+            dropped.update(id(row) for row in group[1:])
+            note = f"{where}: {len(group) - 1} duplicate reading(s) of one poll dropped"
+        else:
+            for row in group:
+                row["value"] = None
+                row["quality_flags"] = [f for f in row["quality_flags"] if f != "ok"] + ["malformed"]
+            note = f"{where}: conflicting readings {values} at one instant; none used"
+        result.suspect.append(note)
+        result.normalization_log.append(note)
+    rows[:] = [row for row in rows if id(row) not in dropped]
 
 
 def _utilization(rows: list[dict[str, Any]], links: dict[str, dict], log: list[str],

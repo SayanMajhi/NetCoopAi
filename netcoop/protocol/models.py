@@ -203,9 +203,6 @@ class Envelope(_Strict):
         self.payload = model.model_validate(self.payload).model_dump(mode="json")
         return self
 
-    def typed_payload(self) -> BaseModel:
-        return PAYLOAD_MODELS[self.type].model_validate(self.payload)
-
 
 # --------------------------------------------------------------------------- telemetry
 
@@ -302,6 +299,9 @@ class Report(_Strict):
     signature_version: str
     affected_devices: list[str] = Field(default_factory=list)
     affected_segments: list[str] = Field(default_factory=list)
+    impact_scope: list[str] = Field(default_factory=list, description="Every device downstream of the fault location "
+                                                                      "in the topology; affected_devices names the location only "
+                                                                      "(contract-1.0.5)")
     supporting_evidence: list[EvidenceItem] = Field(default_factory=list)
     agent_findings: list[str] = Field(default_factory=list)
     alternative_causes: list[str] = Field(default_factory=list)

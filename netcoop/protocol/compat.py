@@ -37,7 +37,7 @@ def upgrade(raw: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
     records: list[str] = []
     out = {k: v for k, v in raw.items() if k in ENVELOPE_FIELDS}
     unknown = {k: v for k, v in raw.items() if k not in ENVELOPE_FIELDS}
-    if unknown:
+    if unknown and isinstance(raw.get("extra", {}), dict):    # a non-object `extra` is left for validation to reject
         out["extra"] = {**raw.get("extra", {}), **unknown}
         records.append(f"preserved unknown fields in extra: {sorted(unknown)}")
     if minor != 0:
@@ -69,8 +69,11 @@ def upgrade_0_9(raw: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
     records.append(f"0.9 field 'kind' {raw.get('kind')!r} -> 'type' {kind!r}")
     ts = raw.get("ts")
     if isinstance(ts, (int, float)) and not isinstance(ts, bool):
-        out["timestamp"] = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        records.append(f"0.9 field 'ts' {ts} (Unix seconds) -> 'timestamp' {out['timestamp']}")
+        try:
+            out["timestamp"] = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            records.append(f"0.9 field 'ts' {ts} (Unix seconds) -> 'timestamp' {out['timestamp']}")
+        except (OverflowError, OSError, ValueError):
+            out["timestamp"] = ts              # not a representable time: left for validation to reject
     elif "ts" in raw:
         out["timestamp"] = raw["ts"]           # left for validation to reject with a field path
 

@@ -4,7 +4,8 @@
 
 **Suspected root cause:** `link_congestion@HOSTEL_UPLINK_01`  
 **Confidence:** 0.88 (heuristic-v1, signatures 1.0)
-**Affected:** HOSTEL_UPLINK_01, SW_CAMPUS_1
+**Fault location:** HOSTEL_UPLINK_01, SW_CAMPUS_1  
+**Impact scope (6 devices):** HOSTEL_AP_01, SW_CAMPUS_1, SW_CAMPUS_3, SW_CAMPUS_4, SW_CAMPUS_5, SW_CAMPUS_6
 
 ## Evidence
 

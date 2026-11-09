@@ -212,7 +212,8 @@ def test_dense_scenarios_are_not_flagged_sparse() -> None:
 ])
 def test_cli_run_writes_report_and_trace(scenario: str, status: str, tmp_path: Path, capsys) -> None:
     from netcoop.cli import main
-    assert main(["run", str(ROOT / scenario), "--local", "--out", str(tmp_path / "r"), "--traces", str(tmp_path / "t")]) == 0
+    assert main(["run", str(ROOT / scenario), "--local", "--out", str(tmp_path / "r"), "--traces", str(tmp_path / "t")]) \
+        == (2 if status == "invalid_input" else 0)
     printed = json.loads(capsys.readouterr().out)
     assert printed["status"] == status
     saved = json.loads((tmp_path / "r" / f"{printed['incident_id']}.json").read_text(encoding="utf-8"))

@@ -67,11 +67,17 @@ Showing that a failure is handled, if asked: stop terminal 1 and rerun `netcoop 
 
 ## Answers to likely questions
 
-**Why several agents and not one classifier?** Each agent owns different evidence, and the output is structured so that one agent can argue with another and be checked. We did not benchmark against a single classifier, so we do not claim higher accuracy. What we can show is that findings cross a validated boundary, that a specific peer message produces a specific new finding, and that removing it removes the finding and lowers the leading score (in 6 of the 16 labelled scenarios that parse; the status never changes in them).
+**Why several agents and not one rules engine?** Each agent owns different evidence and exchanges typed findings with provenance, so one can argue with another and be checked. We did not benchmark a centralized design, and on the held-out set the control run changes no outcomes, so we claim interoperability and explainability, not higher accuracy. What we can show is that findings cross a validated boundary, that a specific peer message produces a specific new finding, and that removing it removes the finding and lowers the leading score (in 6 of the 16 labelled scenarios that parse; the status never changes in them).
 
 **Do the agents really communicate?** Each message goes through the bus. Connectivity is a separate OS process, and `traces/<incident>.jsonl` contains the raw HTTP request and response bodies. `consumed_message_ids` names the messages each finding used. You can call it yourself with `curl` and the bodies in `examples/wire/`.
 
-**Is Connectivity truly independent?** It is an independent process that validates against the exported JSON Schema. It shares a repository and the protocol models with the rest, so it is not an independently written service.
+**Is Connectivity truly independent?** It is an independent process that validates against the exported JSON Schema. It shares a repository and the protocol models with the rest, and the other four agents are in-process, so this is one application with one remote service.
+
+**Could a replayed reading fake a sustained fault?** Copies at one instant count once, and a sustained run needs distinct instants over at least 60 seconds. A replay with fabricated new timestamps is not detectable from the data alone.
+
+**What if verification disagrees with the window?** A probe that does not find the fault blocks `diagnosed`. The report caps it at `probable` and says the two disagree.
+
+**Can a forged or stale message get in?** Each message is checked for incident, sender authority, cause on the sender's card, and a real request to reply to. Sender identity is not cryptographically authenticated.
 
 **Is this AI? There is no LLM.** The agents are deterministic and rule-based, which the problem statement allows. The contribution is the interoperable protocol and evidence reconciliation.
 
@@ -85,6 +91,6 @@ Showing that a failure is handled, if asked: stop terminal 1 and rerun `netcoop 
 
 **What happens with bad input?** An unknown version, missing field or duplicate ID becomes a typed ERROR with a field path, listed in the report. One bad telemetry item is skipped and named. Missing data is never zero and blocks a `healthy` verdict.
 
-**What if an agent fails?** A hung or crashing Performance agent, Infrastructure agent or QUERY responder becomes `AGENT_TIMEOUT` (5 second deadline) or `AGENT_FAILURE`. Without a Connectivity answer the run cannot be `diagnosed` or `healthy`. If Correlation fails twice, the report abstains and invents no score.
+**What if an agent fails?** A hung or crashing step becomes `AGENT_TIMEOUT` (5 second deadline) or `AGENT_FAILURE`. Without a Connectivity answer the run cannot be `diagnosed` or `healthy`. If Correlation fails twice, the report abstains and invents no score.
 
 **Could this be deployed?** Not as it stands. It needs real collectors, a topology feed, tuned thresholds, calibrated confidence and streaming. It only reads data and takes no action on any network.

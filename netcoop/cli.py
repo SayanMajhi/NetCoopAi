@@ -43,15 +43,16 @@ def cmd_run(args: argparse.Namespace) -> int:
     if any("connectivity_unreachable" in (w.get("error") or "") for w in result.wire):
         print(f"warning: no Connectivity agent at {args.endpoint}, so this run is degraded. Start it with\n"
               "  uvicorn connectivity_service.app:app --port 8001\nor pass --local to run it in-process.", file=sys.stderr)
-    return 0
+    return {"failed": 1, "invalid_input": 2}.get(result.report.status, 0)
 
 
 def cmd_eval(args: argparse.Namespace) -> int:
     from netcoop.evaluation.evaluate import evaluate
 
-    out = Path(args.out) / (f"n{args.n}-seeds{'-'.join(map(str, args.seed))}-sigma{args.noise:g}")
+    out = Path(args.out) / (f"n{args.n}-seeds{'-'.join(map(str, args.seed))}-sigma{args.noise:g}"
+                            + ("-control" if args.control else ""))
     summary = evaluate(args.n, args.seed, sigma=args.noise, out=out,
-                       endpoint=args.endpoint)
+                       endpoint=args.endpoint, control=args.control)
     keys = ("cases", "accuracy_overall_exact", "accuracy_named_causes", "affected_device_accuracy",
             "healthy_false_diagnosis_rate", "healthy_abstention_rate", "wrong_diagnoses", "hedged_wrong",
             "evidence_link_integrity", "outcomes", "error_codes")
@@ -89,7 +90,8 @@ def cmd_demo(args: argparse.Namespace) -> int:
         r = result.report
         cause = (r.suspected_root_cause or "").split("@")[0] or None
         codes = sorted({e.split(" ")[0] for e in r.validation_errors if e[:1].isupper() and "_" in e.split(" ")[0]})
-        ok = r.status == label["status"] and cause == label["cause"] and all(c in codes for c in label.get("expected_errors", []) if c != "AGENT_TIMEOUT")
+        raised = {m.payload["code"] for m in result.messages if m.type == "ERROR"}
+        ok = r.status == label["status"] and cause == label["cause"] and all(c in raised | set(codes) for c in label.get("expected_errors", []))
         matched += ok
         rows.append((name.removesuffix(".json"), f"{label['status']} {label['cause'] or ''}".strip(),
                      f"{r.status} {cause or ''}".strip(), "-" if r.confidence is None else f"{r.confidence:.2f}",
@@ -125,6 +127,7 @@ def main(argv: list[str] | None = None) -> int:
     ev.add_argument("--seed", type=int, nargs="+", default=[1], help="one or more generator seeds")
     ev.add_argument("--noise", type=float, default=0.0, help="multiplicative Gaussian noise sigma on gauges, e.g. 0.05")
     ev.add_argument("--endpoint", default=None, help="score against a running Connectivity service instead")
+    ev.add_argument("--control", action="store_true", help="send Connectivity no peer findings (ablation)")
     ev.add_argument("--out", default="eval")
     ev.set_defaults(func=cmd_eval)
 

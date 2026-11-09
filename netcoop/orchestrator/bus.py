@@ -119,7 +119,7 @@ def _validate(body: dict[str, Any]) -> Envelope:
         error, prefix = exc.errors()[0], ""
         # Payload errors come out of Envelope's model validator with locations relative
         # to the payload; re-validate the payload alone to report e.g. "payload.stance".
-        if body.get("type") in PAYLOAD_MODELS and isinstance(body.get("payload"), dict):
+        if isinstance(body.get("type"), str) and body["type"] in PAYLOAD_MODELS and isinstance(body.get("payload"), dict):
             try:
                 PAYLOAD_MODELS[body["type"]].model_validate(body["payload"])
             except ValidationError as inner:

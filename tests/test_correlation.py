@@ -117,10 +117,15 @@ def test_no_candidate_and_no_healthy_proof_is_insufficient() -> None:
 
 
 def test_healthy_needs_normal_measurements_and_passing_checks() -> None:
+    switches = [f"SW_CAMPUS_{n}" for n in range(3, 11)]
     spec = [("HOSTEL_UPLINK_01", "link_utilization_pct", [30, 35, 33, 31, 34], "switch-telemetry"),
+            ("SW_CAMPUS_3", "latency_ms", [12, 13, 11, 12, 14], "client-probe"),
             ("SW_CAMPUS_1", "cpu_pct", [20, 22, 21, 25, 23], "switch-telemetry"),
-            ("SW_CAMPUS_3", "dns_success", [True] * 5, "client-probe"),
-            ("SW_CAMPUS_3", "reachability", [True] * 5, "icmp-monitor")]
+            ("SW_CAMPUS_1", "memory_pct", [40, 41, 40, 42, 41], "switch-telemetry"),
+            ("SW_CAMPUS_1", "queue_drops", [1, 1, 2, 2, 3], "switch-telemetry"),
+            ("SW_CAMPUS_1", "interface_errors", [0, 0, 0, 1, 1], "switch-telemetry")]
+    spec += [(d, m, [True] * 5, "client-probe") for d in switches[:2] for m in ("dns_success", "dhcp_success")]
+    spec += [(d, "reachability", [True] * 5, "icmp-monitor") for d in switches]
     ctx = ctx_for(spec)
     corr = CorrelationAgent()
     corr.rank(ctx, [])

@@ -162,6 +162,7 @@ models, so the generated wire contract is what is enforced.
 | `messages[0]` not a TASK / TASK for another agent | 400 | `ERROR` `INVALID_VALUE` / `UNKNOWN_RECIPIENT` |
 | Bad or `2.x` peer message | 200 | `RESPONSE` to the TASK **plus** an `ERROR` for that peer (`messages.N...`); the peer is dropped |
 | Same `message_id` twice in one Bundle | 200 | `ERROR` `DUPLICATE_MESSAGE` for the repeat; ignored and logged |
+| Peer from another incident, an unregistered sender, or asserting a cause not on its card | 200 | `RESPONSE` to the TASK **plus** an `INVALID_VALUE` `ERROR` for that peer; the peer is dropped |
 
 Every message in the Bundle gets its own event-log row. Unknown top-level fields on a `1.x`
 message are moved into `extra`. Outgoing messages are validated against the schema before they
@@ -218,7 +219,7 @@ response bodies for `traces/<incident>.jsonl`, and the HTTP status. It **never r
 | What happens | Retried? | `error` |
 |---|---|---|
 | 2xx Bundle | — | `None` |
-| Connection refused / timeout | once | `AGENT_TIMEOUT: connectivity_unreachable: ...` → report limitation; the run cannot end `diagnosed` or `healthy` (at most `probable`) |
+| Connection refused / timeout | once | `AGENT_TIMEOUT: connectivity_unreachable: ...` → report limitation; the run cannot end `diagnosed` or `healthy` (at most `probable`). The same applies to a reply holding no analysis, such as only an `ERROR` |
 | 502 / 503 / 504 | once | as the final reply |
 | 4xx / 500 with an ERROR Bundle | no (the agent's typed answer) | `AGENT_FAILURE: HTTP <n>: <code>: <detail>`; the ERRORs still go through the bus |
 | Not JSON / not a Bundle | no | `AGENT_FAILURE: HTTP <n>: ...`; the raw body is kept for the trace |

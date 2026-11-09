@@ -9,6 +9,7 @@ export type Report = {
   confidence: Confidence;
   confidence_method?: ConfidenceMethod;
   evidence_sources?: EvidenceSources;
+  impact_scope?: ImpactScope;
   incident_id: IncidentId;
   limitations?: Limitations;
   normalization_log?: NormalizationLog;
@@ -28,6 +29,10 @@ export type AlternativeCauses = string[];
 export type Confidence = number | null;
 export type ConfidenceMethod = string;
 export type EvidenceSources = string[];
+/**
+ * Every device downstream of the fault location in the topology; affected_devices names the location only (contract-1.0.5)
+ */
+export type ImpactScope = string[];
 export type IncidentId = string;
 export type Limitations = string[];
 export type NormalizationLog = string[];

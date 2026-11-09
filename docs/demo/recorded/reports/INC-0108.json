@@ -12,6 +12,14 @@
   "affected_segments": [
     "DEPT_UPLINK_01"
   ],
+  "impact_scope": [
+    "DEPT_AP_01",
+    "SW_CAMPUS_10",
+    "SW_CAMPUS_2",
+    "SW_CAMPUS_7",
+    "SW_CAMPUS_8",
+    "SW_CAMPUS_9"
+  ],
   "supporting_evidence": [
     {
       "evidence_id": "EV-007",

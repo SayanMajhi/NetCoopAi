@@ -29,7 +29,7 @@ The typed models in [`netcoop/protocol/models.py`](netcoop/protocol/models.py) a
 
 ## Versioning and compatibility
 
-Contract tags: `contract-1.0` (wire contract), `contract-1.0.1` (schemas enforce the model rules), `contract-1.0.2` (`sender`/`recipient` must be non-empty; the "Reading `stance`" rule above is part of the contract). All are `netcoop/1.0`: the changes only reject inputs that were already invalid in meaning. `contract-1.0.3` adds one optional field, `EvidenceItem.interval_delta` (per-interval increase of a cumulative counter; null otherwise). It is additive: every 1.0.2 report is still valid, but strict readers built from the 1.0.2 schemas must regenerate (`netcoop export-schemas`, `npm run gen:types`) before they accept 1.0.3 reports. `contract-1.0.4` adds two optional report fields, also additive: `Report.summary` (one plain-language sentence) and `EvidenceItem.interpretation` (the value against its configured threshold, e.g. `above critical 90 percent`). The report now also lists every message the bus rejected (typed `ERROR`) in `validation_errors`, and its `confidence` is capped by status (`diagnosed`/`healthy` ≤ 0.95, `probable` ≤ 0.69); the uncapped heuristic-v1 score stays in the DECISION ranking and the cap is named in `limitations`.
+Contract tags: `contract-1.0` (wire contract), `contract-1.0.1` (schemas enforce the model rules), `contract-1.0.2` (`sender`/`recipient` must be non-empty; the "Reading `stance`" rule above is part of the contract). All are `netcoop/1.0`: the changes only reject inputs that were already invalid in meaning. `contract-1.0.3` adds one optional field, `EvidenceItem.interval_delta` (per-interval increase of a cumulative counter; null otherwise). It is additive: every 1.0.2 report is still valid, but strict readers built from the 1.0.2 schemas must regenerate (`netcoop export-schemas`, `npm run gen:types`) before they accept 1.0.3 reports. `contract-1.0.4` adds two optional report fields, also additive: `Report.summary` (one plain-language sentence) and `EvidenceItem.interpretation` (the value against its configured threshold, e.g. `above critical 90 percent`). The report now also lists every message the bus rejected (typed `ERROR`) in `validation_errors`, and its `confidence` is capped by status (`diagnosed`/`healthy` ≤ 0.95, `probable` ≤ 0.69); the uncapped heuristic-v1 score stays in the DECISION ranking and the cap is named in `limitations`. `contract-1.0.5` adds one optional report field, `impact_scope` (every device downstream of the fault location); `affected_devices` keeps naming the location only.
 
 Receivers validate with the exported JSON Schema **and** the typed models: Python's `jsonschema` lets a `$` pattern match before a final newline, so the models (Rust regex) are the stricter second check. A message that fails either is a typed `ERROR`, never logged as valid.
 | Incoming | Behaviour |
@@ -41,7 +41,16 @@ Receivers validate with the exported JSON Schema **and** the typed models: Pytho
 | missing required field | `ERROR` with `MISSING_FIELD` and `field_path` |
 | duplicate `message_id` | ignored, logged, `ERROR` with `DUPLICATE_MESSAGE` |
 
-This table describes the orchestrator's bus. The Connectivity REST service accepts `netcoop/1.x` only: the bus upgrades 0.9 messages before forwarding them, and a direct 0.9 request gets `SCHEMA_VERSION_UNSUPPORTED`. A `protocol` value that is not of the form `netcoop/<major>.<minor>` gets `INVALID_VALUE` there.
+Passing the schema is not enough to be delivered. The orchestrator also checks each message's context, and a failure is a typed `ERROR`:
+
+- `incident_id` must be the current incident.
+- The sender must be allowed that message type: only the orchestrator sends `TASK`, only Correlation sends `QUERY` and `DECISION`. A `FINDING` must come from a registered agent or external source, and assert a cause on its list.
+- The recipient must have an agent card.
+- A `RESPONSE`, and any `FINDING` with a non-null `in_reply_to`, must answer a request that was actually sent to that sender.
+
+Connectivity applies the incident and sender rules to the peers in a Bundle. Sender identity is checked against the registry but is not authenticated.
+
+The version table describes the orchestrator's bus. The Connectivity REST service accepts `netcoop/1.x` only: the bus upgrades 0.9 messages before forwarding them, and a direct 0.9 request gets `SCHEMA_VERSION_UNSUPPORTED`. A `protocol` value that is not of the form `netcoop/<major>.<minor>` gets `INVALID_VALUE` there.
 
 ## Correlation: QUERY rounds and confidence
 - Correlation sends at most **2 QUERY rounds** per attempt (it is retried once if it crashes): round 1 verifies the leading hypothesis's key measurement with the in-process agent that owns it (`desired_measurement`, `target_id`); round 2 queries the runner-up when it is within 0.15. The answering agent returns a RESPONSE whose `evidence_ids` are every fresh sample of that measurement; Correlation judges severity on those samples itself. Before/after rankings are recorded in the DECISION's `limitations`.
@@ -182,6 +191,7 @@ _Generated from `netcoop/protocol/models.py` (netcoop/1.0). Do not edit by hand.
 | `signature_version` | string | yes |  |
 | `affected_devices` | array | no |  |
 | `affected_segments` | array | no |  |
+| `impact_scope` | array | no | Every device downstream of the fault location in the topology; affected_devices names the location only (contract-1.0.5) |
 | `supporting_evidence` | array | no |  |
 | `agent_findings` | array | no |  |
 | `alternative_causes` | array | no |  |
