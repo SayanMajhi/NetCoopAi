@@ -206,24 +206,55 @@ Python 3.12 · Pydantic · FastAPI and Uvicorn · HTTPX · jsonschema · PyYAML 
 
 ## Repository layout
 
-| Path | Contents |
-|---|---|
-| `netcoop/cli.py` | Entry point: `netcoop run`, `demo`, `eval`, `export-schemas` |
-| `netcoop/agents/` | Performance, Infrastructure, Correlation and Reporting |
-| `connectivity_service/` | Connectivity agent, as a FastAPI process |
-| `netcoop/protocol/` | Protocol models (source of truth), version compatibility, agent cards |
-| `netcoop/orchestrator/` | Pipeline, message bus, event log, HTTP client |
-| `netcoop/normalizer/` | Telemetry normalization and the organizer-format adapter |
-| `netcoop/config/signatures-1.0.yaml` | Thresholds, fault signatures, decision gates |
-| `netcoop/evaluation/` | Held-out generator and scoring |
-| `dashboard/` | React dashboard over real runs |
-| `scenarios/` | Topology, labelled fixtures, labels (read only for scoring) |
-| `data/generator_raw/` | Untouched organizer output and field mapping |
-| `examples/` | One valid message of each type, version samples, wire bodies |
-| `schemas/` | Generated JSON Schemas |
-| `tests/` | Test suite |
-| `reports/`, `traces/` | Generated run output (not committed) |
-| `docs/` | [Demo script](docs/DEMO_SCRIPT.md), [evaluation](docs/results/EVALUATION.md), [recorded runs](docs/demo/recorded/), [engineering history](docs/history/) |
+The main files and folders below cover telemetry ingestion, agent collaboration, diagnosis, evaluation and the dashboard.
+
+```text
+HACKATHON/
+|-- netcoop/                       # Core diagnosis package
+|   |-- cli.py                     # Commands: run, demo, eval and export-schemas
+|   |-- agents/                    # Performance, Infrastructure, Correlation and Reporting agents
+|   |-- config/
+|   |   `-- signatures-1.0.yaml     # Fault signatures, thresholds, confidence weights and gates
+|   |-- protocol/                  # Message models, agent cards, version compatibility and schema export
+|   |-- normalizer/                # Converts raw telemetry into canonical evidence with quality flags
+|   |-- orchestrator/              # Coordinates tasks, validates messages, calls HTTP and logs events
+|   `-- evaluation/                # Generates held-out cases and measures diagnostic results
+|-- connectivity_service/         # Connectivity agent: topology, service checks and peer interpretation
+|   |-- app.py                     # FastAPI endpoints and incoming message validation
+|   `-- logic.py                   # Connectivity findings and downstream impact analysis
+|-- dashboard/                    # React and Vite interface for reports and agent traces
+|   |-- src/                       # Dashboard components, data loading, styles and generated types
+|   `-- scripts/                   # Generates TypeScript types from JSON Schemas
+|-- data/
+|   |-- generator_raw/             # Untouched samples from the organizer's telemetry generator
+|   `-- field_mapping.md           # Raw fields, canonical names, units and conversion assumptions
+|-- scenarios/
+|   |-- dev/                       # Normal, fault, ambiguous and invalid-input regression scenarios
+|   |-- topology.json              # Campus devices, links and their relationships
+|   `-- labels.json                # Expected scenario outcomes, used only for scoring
+|-- schemas/                      # Generated JSON Schemas for messages, evidence, bundles and reports
+|-- examples/                     # Sample protocol messages and reports
+|   `-- wire/                      # HTTP request bodies for testing Connectivity directly
+|-- tests/                        # Unit, integration, schema and adversarial regression tests
+|-- docs/
+|   |-- DEMO_SCRIPT.md             # Walkthrough for the end-to-end demonstration
+|   |-- CONNECTIVITY_SERVICE.md    # REST contract, validation and service behavior
+|   |-- problem_statement.pdf      # Official hackathon requirements and evaluation rubric
+|   |-- demo/recorded/             # Saved demonstration reports and message traces
+|   |-- results/                   # Evaluation methodology, metrics and archived runs
+|   `-- history/                   # Earlier plans, task records and review history
+|-- reports/                      # Generated diagnostic JSON and Markdown reports
+|-- traces/                       # Generated JSONL messages and HTTP request/response records
+|-- eval/                         # Generated evaluation summaries and non-exact cases
+|-- .github/workflows/ci.yml       # Automated backend tests, scenario checks and dashboard build
+|-- pyproject.toml                # Python package metadata, dependencies and CLI entry point
+|-- requirements.lock.txt         # Pinned Python dependencies for reproducible setup
+|-- ARCHITECTURE.md               # Agent responsibilities, correlation logic and failure handling
+|-- PROTOCOL.md                   # Message fields, units, versions and interoperability rules
+`-- README.md                     # Project overview, setup, demo commands and limitations
+```
+
+Start with `netcoop/cli.py` to follow a run, then `netcoop/orchestrator/run.py` for the workflow and `netcoop/agents/correlation.py` for the decision logic. See the [demo script](docs/DEMO_SCRIPT.md), [evaluation results](docs/results/EVALUATION.md), [recorded runs](docs/demo/recorded/) and [engineering history](docs/history/) for supporting material.
 
 ## Limitations and future work
 
