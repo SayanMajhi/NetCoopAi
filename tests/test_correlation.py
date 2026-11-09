@@ -1,4 +1,4 @@
-"""Correlation (Phase 3): signature checks, heuristic-v1 arithmetic, gates, QUERY rounds."""
+"""Correlation: signature checks, heuristic-v1 arithmetic, gates, QUERY rounds."""
 from __future__ import annotations
 
 from typing import Any

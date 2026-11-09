@@ -1,0 +1,54 @@
+# Incident INC-0108: probable
+
+> Probably link congestion on DEPT_UPLINK_01, affecting SW_CAMPUS_2, but not confirmed: interface_fault@DEPT_UPLINK_01 cannot yet be ruled out. Verify before acting.
+
+**Suspected root cause:** `link_congestion@DEPT_UPLINK_01`  
+**Confidence:** 0.69 (heuristic-v1, signatures 1.0)
+**Affected:** DEPT_UPLINK_01, SW_CAMPUS_2
+
+## Evidence
+
+| ID | metric | value | per interval | meaning | source |
+|---|---|---|---|---|---|
+| EV-007 | link_utilization_pct | 97.7 percent |  | above critical 90 percent | switch-telemetry |
+| EV-009 | link_utilization_pct | 96.2 percent |  | above critical 90 percent | switch-telemetry |
+| EV-011 | link_utilization_pct | 93.8 percent |  | above critical 90 percent | switch-telemetry |
+| EV-098 | queue_drops | 2010.0 count | +530 | +530 in one interval, at or above critical 100 | switch-telemetry |
+| EV-099 | queue_drops | 2620.0 count | +610 | +610 in one interval, at or above critical 100 | switch-telemetry |
+| EV-180 | latency_ms | 238.9 ms |  | above critical 200 ms | client-probe |
+
+## Alternative causes
+
+- interface_fault@DEPT_UPLINK_01
+
+## Recommended actions
+
+- Confirm before acting: Check egress queue depth and top talkers on DEPT_UPLINK_01
+- Confirm before acting: Rebalance or rate-limit bulk traffic, or add capacity to DEPT_UPLINK_01 if utilization stays high
+- Rule out interface_fault@DEPT_UPLINK_01: Inspect CRC/alignment counters and transceiver/cable on DEPT_UPLINK_01
+
+## Limitations
+
+- based on the 5-minute window ending 2026-11-01T10:05:00+00:00; confidence is the documented heuristic-v1 score, not a calibrated probability
+- heuristic-v1 score 0.82 reported as 0.69: a cause that missed the diagnosed gate is reported below 0.70
+- before Q-01: interface_fault@DEPT_UPLINK_01 0.80, link_congestion@DEPT_UPLINK_01 0.78
+- after Q-01: interface_fault@DEPT_UPLINK_01 0.79, link_congestion@DEPT_UPLINK_01 0.78 (interface_fault@DEPT_UPLINK_01: peak error rate 6/min reaches only warn 5; from 3 new on-demand probe sample(s))
+- before Q-02: interface_fault@DEPT_UPLINK_01 0.79, link_congestion@DEPT_UPLINK_01 0.78
+- after Q-02: link_congestion@DEPT_UPLINK_01 0.82, interface_fault@DEPT_UPLINK_01 0.79 (link_congestion@DEPT_UPLINK_01: all 3 utilization samples above 90%; from 3 new on-demand probe sample(s))
+- unresolved rival interface_fault@DEPT_UPLINK_01 within 0.03 of link_congestion@DEPT_UPLINK_01
+- control run: Connectivity received no peer findings
+
+## Normalization
+
+- records[10].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct
+- records[11].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct
+- records[12].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct
+- records[13].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct
+- records[14].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct
+- records[20].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct
+- records[21].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct
+- records[22].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct
+- records[23].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct
+- records[24].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct
+
+Findings: F-CONN-01, F-CONN-02, F-CONN-03, F-CONN-04, F-CONN-05, F-CONN-06, F-CONN-07, F-CONN-08, F-CONN-09, F-INF-01, F-INF-02, F-INF-03, F-INF-04, F-PERF-01, F-PERF-02, F-PERF-03 · trace: INC-0108-TRACE

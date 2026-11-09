@@ -1,26 +1,90 @@
-# NetCoop AI — demo script (target 4:00, hard limit 5:00)
+# NetCoop AI demo script (4:00)
 
-Rule: show only what actually works on the recording day. Every beat has its exact command.
-Run from a fresh terminal, font 16+, terminal left and dashboard right.
-
-| Time | Beat | What the viewer sees | Command / view | Built in |
-|---|---|---|---|---|
-| 0:00–0:20 | **Problem** | One sentence: campus faults are spread across devices and formats; 5 agents must agree on one evidence-based answer | title slide | — |
-| 0:20–0:45 | **Real data in** | Untouched organizer generator file, its field mapping, the adapter output with `original_field` kept | `type data\generator_raw\hardware_failure_unseeded.json`, `data/field_mapping.md` | Phase 1 ✅ |
-| 0:45–1:15 | **One protocol** | `netcoop/1.0` envelope; a FINDING without `stance` is rejected with `field_path: payload.stance` | `pytest tests/test_protocol.py -q`, `docs/m1_curl_proof.md` | Phase 1 ✅ |
-| 1:15–1:35 | **Version handling** | 0.9 message upgraded with a visible record; 2.0 message gets `SCHEMA_VERSION_UNSUPPORTED` | `netcoop run scenarios/dev/schema_0_9.json` | Phase 3 |
-| 1:35–2:20 | **Agents really collaborate** | Connectivity runs as a separate REST process; it receives Performance/Infrastructure findings and changes its scope; the control run without them gives a different answer | terminal 1: `uvicorn connectivity_service.app:app --port 8001`; terminal 2: `netcoop run scenarios/dev/congestion.json` then `--control` | Phase 2 |
-| 2:20–3:00 | **Conflict resolution** | Ambiguous case: congestion vs interface errors; Correlation sends a QUERY, the answer changes the ranking; report says `probable` with the rival named | `netcoop run scenarios/dev/ambiguous_congestion_errors.json` + dashboard event feed | Phase 3 |
-| 3:00–3:25 | **Honesty** | Missing/stale data gives `insufficient_evidence` with no named cause | `netcoop run scenarios/dev/missing_stale.json` | Phase 3 |
-| 3:25–3:50 | **Results** | Held-out evaluation: confusion matrix, false-diagnosis rate on healthy, abstention rate | `netcoop eval --n 50 --noise --seed 7` | Phase 4 |
-| 3:50–4:00 | **Close** | Final JSON with evidence IDs; repo link | dashboard report view | Phase 5 |
-
-## Backup plan
-- If the REST process fails live: use the pre-recorded trace in `traces/` and say so.
-- If the dashboard is not ready: show the same JSON in the terminal (`netcoop run ... | more`).
-- Record each beat separately and join them; never re-run the whole demo for one mistake.
+Every command below was run on this repository. Run from the repository root with the virtual environment active, in a font of at least 16 points.
 
 ## Before recording
-- [ ] `pytest -q` green on `main`
-- [ ] each command above run once on a clean clone
-- [ ] traces for every beat saved in `traces/`
+
+Terminal 1 stays open with Connectivity. Terminal 2 runs the commands. The dashboard is a browser tab.
+
+```bash
+uvicorn connectivity_service.app:app --port 8001
+```
+
+```bash
+netcoop demo --endpoint http://127.0.0.1:8001
+```
+
+```bash
+netcoop run scenarios/dev/congestion.json --control
+```
+
+```bash
+netcoop run scenarios/dev/ambiguous_congestion_errors.json --control
+```
+
+```bash
+npm --prefix dashboard run dev
+```
+
+`netcoop demo --endpoint` is what makes the dashboard show "separate process, HTTP 200". Without `--endpoint`, Connectivity runs in-process and the dashboard says so. Open http://localhost:5173 after these have run.
+
+## Script
+
+| Time | Beat | Say | Show |
+|---|---|---|---|
+| 0:00–0:25 | **Problem** | Campus faults are spread across switches, probes and service checks. Several causes look alike, and a confident wrong answer sends an engineer to fix the wrong thing. NetCoop gives one evidence-based answer, or says it cannot. | README, first lines |
+| 0:25–0:55 | **Architecture** | Five agents, one validated protocol. Performance and Infrastructure find; Connectivity interprets them in its own process; Correlation re-checks and queries; Reporting publishes. They are deterministic rule-based agents. | README Mermaid diagram, then terminal 1 with `uvicorn` running |
+| 0:55–1:45 | **A diagnosis** | Run it live. Status, cause, cited evidence with thresholds, affected devices, and a limitation stating this is one window and not a probability. | Terminal 2: `netcoop run scenarios/dev/congestion.json`. Dashboard: **Congestion**, top card and Supporting evidence |
+| 1:45–2:40 | **Real cooperation** | Timeline: Performance and Infrastructure each name the uplink. The highlighted Connectivity finding `F-CONN-03` lists the two peer messages it consumed and adds a blast radius of 6 devices, "a degradation, not an outage". It cites only its own checks. In the control run nobody told it, so the finding does not exist and the score drops from 1.00 to 0.88. Be exact: the status does not change here. | Dashboard: Agent communication, then **Why the exchange matters** |
+| 2:40–3:15 | **Conflict** | Congestion and an interface fault both pass on one uplink. Interface fault leads. Correlation queries the owner of each key measurement; the error rate is only at warn, utilization is critical, and the ranking flips. The lead is still 0.03, under the 0.15 gate, so it reports `probable`, names the rival and says verify first. | Dashboard: **Ambiguous congestion errors**, Verification rounds and Competing causes. Then **Missing stale**: no cause named |
+| 3:15–3:40 | **Evidence** | Held-out cases from a generator that imports no decision code. Zero false diagnoses at every noise level. These come from our own fault model, so they do not show field accuracy. The first run found a real bug, which is in the write-up. | Terminal 2: `netcoop eval --n 48 --seed 7 --noise 0.05` (about 2 s). Then `docs/results/EVALUATION.md` table |
+| 3:40–4:00 | **Close** | What is proved: agents exchange validated messages over a real process boundary, peer findings change another agent's output, and the system abstains when it should. What is not: real telemetry and calibrated confidence. | Dashboard: Limitations and raw JSON |
+
+## Fallbacks
+
+Say out loud when you switch to a recorded run.
+
+| Failure | Do this |
+|---|---|
+| Connectivity will not start or port 8001 is busy | Add `--local` to `netcoop run`, and say Connectivity is in-process for this take. The dashboard shows it as in-process |
+| Dashboard fails | Open `reports/INC-0103.md` and `reports/INC-0103--control.md` as text. Compare the limitations and confidence lines |
+| Live environment fails entirely | Use the recorded two-process runs below, and label them as recorded |
+| A beat goes wrong | Record beats separately and join them |
+
+Recorded runs are in [`docs/demo/recorded/`](demo/recorded/). To load them into the dashboard:
+
+```bash
+cp docs/demo/recorded/reports/* reports/
+```
+
+```bash
+cp docs/demo/recorded/traces/* traces/
+```
+
+In Windows PowerShell, `cp` works the same way with these paths.
+
+Showing that a failure is handled, if asked: stop terminal 1 and rerun `netcoop run scenarios/dev/congestion.json`. The CLI warns, the trace holds `AGENT_TIMEOUT`, and the status drops to `probable` because nobody judged scope or paths.
+
+## Answers to likely questions
+
+**Why several agents and not one classifier?** Each agent owns different evidence, and the output is structured so that one agent can argue with another and be checked. We did not benchmark against a single classifier, so we do not claim higher accuracy. What we can show is that findings cross a validated boundary, that a specific peer message produces a specific new finding, and that removing it removes the finding and lowers the leading score (in 6 of the 16 labelled scenarios that parse; the status never changes in them).
+
+**Do the agents really communicate?** Each message goes through the bus. Connectivity is a separate OS process, and `traces/<incident>.jsonl` contains the raw HTTP request and response bodies. `consumed_message_ids` names the messages each finding used. You can call it yourself with `curl` and the bodies in `examples/wire/`.
+
+**Is Connectivity truly independent?** It is an independent process that validates against the exported JSON Schema. It shares a repository and the protocol models with the rest, so it is not an independently written service.
+
+**Is this AI? There is no LLM.** The agents are deterministic and rule-based, which the problem statement allows. The contribution is the interoperable protocol and evidence reconciliation.
+
+**What does 0.95 mean?** It is the `heuristic-v1` score: a documented weighted formula multiplied by evidence coverage. It is not a probability and has not been calibrated. It is capped by status, and the uncapped score remains in the DECISION.
+
+**How is it better than a rule-based monitoring script?** Thresholds alone cannot name the rival cause, refuse a busy-but-healthy link, or say what is missing. Here each conclusion cites evidence and the sensors behind it, conflicts are verified with a targeted query, and bad input becomes a typed error. It is still rules, not learning.
+
+**How good is the dataset?** Synthetic. The organizer generator emits one reading per call with no labels, so we use it to prove format compatibility. Accuracy comes from our own generator. It differs from development data in seeds, timing, positions and metric mixes, but shares our model of what each fault looks like.
+
+**What if the evaluation was tuned?** The generator was committed before any held-out result was seen, and it imports no decision code. The first run scored 237/240, and we published that. After a bug fix, confirmation used fresh seeds. Two later signature edits, for `weak_wifi` and `hardware_failure`, came after publication; re-running the same seeds gave identical metrics, and `EVALUATION.md` records this.
+
+**What happens with bad input?** An unknown version, missing field or duplicate ID becomes a typed ERROR with a field path, listed in the report. One bad telemetry item is skipped and named. Missing data is never zero and blocks a `healthy` verdict.
+
+**What if an agent fails?** A hung or crashing Performance agent, Infrastructure agent or QUERY responder becomes `AGENT_TIMEOUT` (5 second deadline) or `AGENT_FAILURE`. Without a Connectivity answer the run cannot be `diagnosed` or `healthy`. If Correlation fails twice, the report abstains and invents no score.
+
+**Could this be deployed?** Not as it stands. It needs real collectors, a topology feed, tuned thresholds, calibrated confidence and streaming. It only reads data and takes no action on any network.

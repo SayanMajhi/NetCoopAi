@@ -1,7 +1,7 @@
-"""`netcoop eval`: run the held-out set and publish every metric ARCHITECTURE §7 asks for (P4-5).
+"""`netcoop eval`: run the held-out set and publish the metrics listed in ARCHITECTURE §7.
 
-Thresholds, weights and gates are whatever signatures-1.0.yaml says (frozen at `ed288c2`); this
-module only scores. Outcome of one case, judged against the generator's label:
+Thresholds, weights and gates are whatever signatures-1.0.yaml says; this module only scores.
+Outcome of one case, judged against the generator's label:
 
 - exact            status and cause both match the label
 - right cause      a fault class answered with the right cause but another status (e.g. probable)
@@ -29,7 +29,8 @@ NAMED = ("diagnosed", "probable")
 
 
 def add_noise(fx: dict[str, Any], sigma: float, seed: int) -> dict[str, Any]:
-    """AI 3's noise function (feedback3.md R3, as in tests/test_noise_robustness.py), on records and on_query."""
+    """Multiplicative Gaussian noise on gauges and +-(sigma*40) dB on RSSI, applied to records and on_query
+    (same function as tests/test_noise_robustness.py)."""
     rng = random.Random(seed)
     x = copy.deepcopy(fx)
     for r in x["records"] + x.get("on_query", []):
@@ -141,7 +142,7 @@ def summarize(rows: list[dict[str, Any]], n: int, seeds: list[int], sigma: float
         variants[f"{r['cls']} / {r['variant']}"][r["status"]] += 1
     return {
         "cases": len(rows), "n_per_seed": n, "seeds": seeds, "sigma": sigma,
-        "frozen": "thresholds, weights and gates from netcoop/config/signatures-1.0.yaml (unchanged since ed288c2)",
+        "frozen": "thresholds, weights and gates from netcoop/config/signatures-1.0.yaml, not changed by this run",
         "class_counts": {c: len(by_cls[c]) for c in CLASSES},
         "outcomes": dict(Counter(r["outcome"] for r in rows)),
         "outcomes_by_class": {c: dict(Counter(r["outcome"] for r in by_cls[c])) for c in CLASSES},

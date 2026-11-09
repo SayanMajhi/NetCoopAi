@@ -2,7 +2,7 @@
 
     netcoop run <scenario> [--local] [--control] [--endpoint URL]   diagnose one scenario
     netcoop export-schemas      regenerate schemas/*.json and the PROTOCOL.md field table
-    netcoop eval [--n 48] [--seed S ...] [--noise SIGMA] [--out DIR]   score the held-out set (Phase 4)
+    netcoop eval [--n 48] [--seed S ...] [--noise SIGMA] [--out DIR]   score the held-out set
     netcoop demo [--endpoint URL]   run every scenario in scenarios/dev and compare with its label
 """
 from __future__ import annotations
@@ -40,6 +40,9 @@ def cmd_run(args: argparse.Namespace) -> int:
     report_path, trace_path = write_outputs(result, Path(args.out), Path(args.traces), control=args.control)
     print(json.dumps(result.report.model_dump(mode="json"), indent=2))
     print(f"\nreport: {report_path}\ntrace:  {trace_path}", file=sys.stderr)
+    if any("connectivity_unreachable" in (w.get("error") or "") for w in result.wire):
+        print(f"warning: no Connectivity agent at {args.endpoint}, so this run is degraded. Start it with\n"
+              "  uvicorn connectivity_service.app:app --port 8001\nor pass --local to run it in-process.", file=sys.stderr)
     return 0
 
 
@@ -63,7 +66,12 @@ def cmd_demo(args: argparse.Namespace) -> int:
     from netcoop.orchestrator.run import load_signatures, load_topology, run_incident, write_outputs
 
     root = Path(args.scenarios)
-    labels = json.loads((root.parent / "labels.json").read_text(encoding="utf-8"))["scenarios"]
+    labels_path = root.parent / "labels.json"
+    if not labels_path.is_file():
+        print(f"cannot find {labels_path}: run netcoop demo from the repository root, or pass --scenarios",
+              file=sys.stderr)
+        return 2
+    labels = json.loads(labels_path.read_text(encoding="utf-8"))["scenarios"]
     topology, signatures = load_topology(), load_signatures()
     rows, matched = [], 0
     for name, label in labels.items():
@@ -81,7 +89,7 @@ def cmd_demo(args: argparse.Namespace) -> int:
         r = result.report
         cause = (r.suspected_root_cause or "").split("@")[0] or None
         codes = sorted({e.split(" ")[0] for e in r.validation_errors if e[:1].isupper() and "_" in e.split(" ")[0]})
-        ok = r.status == label["status"] and cause == label["cause"] and             all(c in codes for c in label.get("expected_errors", []) if c != "AGENT_TIMEOUT")
+        ok = r.status == label["status"] and cause == label["cause"] and all(c in codes for c in label.get("expected_errors", []) if c != "AGENT_TIMEOUT")
         matched += ok
         rows.append((name.removesuffix(".json"), f"{label['status']} {label['cause'] or ''}".strip(),
                      f"{r.status} {cause or ''}".strip(), "-" if r.confidence is None else f"{r.confidence:.2f}",
@@ -104,7 +112,7 @@ def main(argv: list[str] | None = None) -> int:
 
     run = sub.add_parser("run", help="diagnose one scenario file; writes reports/ and traces/")
     run.add_argument("scenario", help="path to a scenario JSON, e.g. scenarios/dev/congestion.json")
-    run.add_argument("--local", action="store_true", help="call the Connectivity agent in-process (tests only)")
+    run.add_argument("--local", action="store_true", help="run the Connectivity agent in-process (no server needed)")
     run.add_argument("--control", action="store_true", help="send Connectivity no peer findings")
     run.add_argument("--endpoint", default=DEFAULT_ENDPOINT, help="Connectivity agent base URL")
     run.add_argument("--topology", default=str(DEFAULT_TOPOLOGY))
@@ -115,7 +123,7 @@ def main(argv: list[str] | None = None) -> int:
     ev = sub.add_parser("eval", help="generate the held-out set, run it, publish metrics (ARCHITECTURE §7)")
     ev.add_argument("--n", type=int, default=48, help="cases per seed (8 classes, round-robin)")
     ev.add_argument("--seed", type=int, nargs="+", default=[1], help="one or more generator seeds")
-    ev.add_argument("--noise", type=float, default=0.0, help="AI 3's multiplicative noise sigma, e.g. 0.05")
+    ev.add_argument("--noise", type=float, default=0.0, help="multiplicative Gaussian noise sigma on gauges, e.g. 0.05")
     ev.add_argument("--endpoint", default=None, help="score against a running Connectivity service instead")
     ev.add_argument("--out", default="eval")
     ev.set_defaults(func=cmd_eval)

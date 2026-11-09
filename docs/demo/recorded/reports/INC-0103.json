@@ -1,0 +1,130 @@
+{
+  "incident_id": "INC-0103",
+  "status": "diagnosed",
+  "suspected_root_cause": "link_congestion@HOSTEL_UPLINK_01",
+  "summary": "Diagnosed link congestion on HOSTEL_UPLINK_01, affecting SW_CAMPUS_1: 6 evidence items from 2 independent sources agree (confidence 0.95).",
+  "confidence": 0.95,
+  "confidence_method": "heuristic-v1",
+  "signature_version": "1.0",
+  "affected_devices": [
+    "SW_CAMPUS_1"
+  ],
+  "affected_segments": [
+    "HOSTEL_UPLINK_01"
+  ],
+  "supporting_evidence": [
+    {
+      "evidence_id": "EV-047",
+      "metric": "link_utilization_pct",
+      "value": 93.4,
+      "unit": "percent",
+      "source_id": "switch-telemetry",
+      "interval_delta": null,
+      "interpretation": "above critical 90 percent"
+    },
+    {
+      "evidence_id": "EV-049",
+      "metric": "link_utilization_pct",
+      "value": 96.4,
+      "unit": "percent",
+      "source_id": "switch-telemetry",
+      "interval_delta": null,
+      "interpretation": "above critical 90 percent"
+    },
+    {
+      "evidence_id": "EV-051",
+      "metric": "link_utilization_pct",
+      "value": 93.1,
+      "unit": "percent",
+      "source_id": "switch-telemetry",
+      "interval_delta": null,
+      "interpretation": "above critical 90 percent"
+    },
+    {
+      "evidence_id": "EV-078",
+      "metric": "queue_drops",
+      "value": 2010.0,
+      "unit": "count",
+      "source_id": "switch-telemetry",
+      "interval_delta": 530.0,
+      "interpretation": "+530 in one interval, at or above critical 100"
+    },
+    {
+      "evidence_id": "EV-079",
+      "metric": "queue_drops",
+      "value": 2620.0,
+      "unit": "count",
+      "source_id": "switch-telemetry",
+      "interval_delta": 610.0,
+      "interpretation": "+610 in one interval, at or above critical 100"
+    },
+    {
+      "evidence_id": "EV-120",
+      "metric": "latency_ms",
+      "value": 220.2,
+      "unit": "ms",
+      "source_id": "client-probe",
+      "interval_delta": null,
+      "interpretation": "above critical 200 ms"
+    }
+  ],
+  "agent_findings": [
+    "F-CONN-01",
+    "F-CONN-02",
+    "F-CONN-03",
+    "F-CONN-04",
+    "F-CONN-05",
+    "F-CONN-06",
+    "F-CONN-07",
+    "F-CONN-08",
+    "F-CONN-09",
+    "F-CONN-10",
+    "F-INF-01",
+    "F-INF-02",
+    "F-PERF-01",
+    "F-PERF-02",
+    "F-PERF-03"
+  ],
+  "alternative_causes": [],
+  "recommended_actions": [
+    "Check egress queue depth and top talkers on HOSTEL_UPLINK_01",
+    "Rebalance or rate-limit bulk traffic, or add capacity to HOSTEL_UPLINK_01 if utilization stays high",
+    "Confirm upstream links of HOSTEL_UPLINK_01 are not saturated too"
+  ],
+  "evidence_sources": [
+    "connectivity_agent",
+    "correlation_agent",
+    "infrastructure_agent",
+    "performance_agent"
+  ],
+  "limitations": [
+    "based on the 5-minute window ending 2026-11-01T10:05:00+00:00; confidence is the documented heuristic-v1 score, not a calibrated probability",
+    "heuristic-v1 score 1.00 reported as 0.95: no conclusion from one telemetry window is reported as certain",
+    "before Q-01: link_congestion@HOSTEL_UPLINK_01 0.96",
+    "after Q-01: link_congestion@HOSTEL_UPLINK_01 1.00 (link_congestion@HOSTEL_UPLINK_01: all 3 utilization samples above 90%; from 3 new on-demand probe sample(s))"
+  ],
+  "normalization_log": [
+    "records[10].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[11].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[12].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[13].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[14].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[20].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[21].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[22].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[23].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "records[24].metrics.cpu_utilization_pct: cpu_utilization_pct -> cpu_pct",
+    "DEPT_UPLINK_01 at 2026-11-01T10:00:30+00:00: derived utilization 37.2% from throughput/capacity",
+    "DEPT_UPLINK_01 at 2026-11-01T10:01:30+00:00: derived utilization 34.5% from throughput/capacity",
+    "DEPT_UPLINK_01 at 2026-11-01T10:02:30+00:00: derived utilization 32.7% from throughput/capacity",
+    "DEPT_UPLINK_01 at 2026-11-01T10:03:30+00:00: derived utilization 37.5% from throughput/capacity",
+    "DEPT_UPLINK_01 at 2026-11-01T10:04:30+00:00: derived utilization 34.8% from throughput/capacity",
+    "HOSTEL_UPLINK_01 at 2026-11-01T10:00:30+00:00: derived utilization 93.4% from throughput/capacity",
+    "HOSTEL_UPLINK_01 at 2026-11-01T10:01:30+00:00: derived utilization 96.4% from throughput/capacity",
+    "HOSTEL_UPLINK_01 at 2026-11-01T10:02:30+00:00: derived utilization 93.1% from throughput/capacity",
+    "HOSTEL_UPLINK_01 at 2026-11-01T10:03:30+00:00: derived utilization 95.3% from throughput/capacity",
+    "HOSTEL_UPLINK_01 at 2026-11-01T10:04:30+00:00: derived utilization 93.4% from throughput/capacity"
+  ],
+  "validation_errors": [],
+  "agent_trace_id": "INC-0103-TRACE"
+}

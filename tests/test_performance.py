@@ -81,7 +81,7 @@ class PerformanceTests(unittest.TestCase):
         self.assertTrue(any(ctx.evidence(eid).metric == "queue_drops" for eid in findings[0].payload["evidence_ids"]))
 
     def test_background_drop_growth_below_warn_does_not_corroborate(self):
-        # Phase 3 re-review P4-0a: +5 per interval is normal background growth, below queue_drops.warn (10)
+        # +5 per interval is normal background growth, below queue_drops.warn (10)
         _, _, findings = _run(_fixture([95, 96, 97, 96, 95], drops=[100, 105, 110, 115, 120]))
         self.assertEqual([], findings)
 

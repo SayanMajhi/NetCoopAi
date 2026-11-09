@@ -1,10 +1,10 @@
-// Loads the repo's examples/ and checks each one against the generated JSON Schemas,
-// the same contract the Python bus and the Connectivity REST service enforce.
+// Loads real runs (reports/, traces/) and the repo's examples/, and checks each one against the
+// generated JSON Schemas: the same contract the Python bus and the Connectivity REST service enforce.
 import Ajv2020 from "ajv/dist/2020";
 import addFormats from "ajv-formats";
 import messageSchema from "../../schemas/message-1.0.json";
 import reportSchema from "../../schemas/report-1.0.json";
-import type { DecisionPayload, Envelope } from "./types/message";
+import type { Envelope } from "./types/message";
 import type { Report } from "./types/report";
 
 const ajv = new Ajv2020({ allErrors: true, strict: false });
@@ -15,19 +15,31 @@ const validateReport = ajv.compile(reportSchema);
 export type Check = { valid: true } | { valid: false; reason: string };
 
 export interface FeedItem {
-  file: string;
+  id: string;
   raw: Record<string, unknown>;
   message: Envelope | null; // null when the body is not a netcoop/1.x envelope
   check: Check;
 }
 
-// Story order for the mock incident; unknown files go last.
-const ORDER = ["task", "finding", "query", "response", "decision", "error", "finding_v0_9", "message_v2_0"];
+export interface WireRecord {
+  httpStatus: number | null; // null when Connectivity ran in-process
+  error: string | null;
+  sent: number; // messages in the request Bundle
+  received: number; // messages in the reply Bundle
+}
 
-const files = import.meta.glob<Record<string, unknown>>("../../examples/*.json", { eager: true, import: "default" });
-const byName = Object.fromEntries(
-  Object.entries(files).map(([path, body]) => [path.split("/").pop()!.replace(/\.json$/, ""), body]),
-);
+export interface RunItem {
+  file: string;
+  title: string;
+  complaint?: string;
+  report: Report;
+  check: Check;
+  sample: boolean; // true for examples/, which are schema samples and not runs
+  isControl: boolean;
+  trace?: FeedItem[]; // the message trace written by `netcoop run` / `netcoop demo`
+  traceError?: string;
+  wire?: WireRecord;
+}
 
 function checkMessage(raw: Record<string, unknown>): Check {
   const protocol = typeof raw.protocol === "string" ? raw.protocol : "";
@@ -41,51 +53,65 @@ function checkMessage(raw: Record<string, unknown>): Check {
   return { valid: false, reason: `${err?.instancePath || "/"}${missing}: ${err?.message ?? "invalid"}` };
 }
 
-export const feed: FeedItem[] = Object.keys(byName)
-  .filter((name) => !name.startsWith("report_"))
-  .sort((a, b) => (ORDER.indexOf(a) + 1 || 99) - (ORDER.indexOf(b) + 1 || 99))
-  .map((name) => {
-    const raw = byName[name];
-    const check = checkMessage(raw);
-    return { file: `${name}.json`, raw, message: check.valid ? (raw as unknown as Envelope) : null, check };
-  });
-
-export const decision = feed.find((f) => f.message?.type === "DECISION")?.message?.payload as unknown as
-  | DecisionPayload
-  | undefined;
-
-export interface ReportItem {
-  file: string;
-  report: Report;
-  check: Check;
-  trace?: FeedItem[]; // the real message trace, for reports written by `netcoop run` / `netcoop demo`
-}
-
 function checkReport(raw: Record<string, unknown>): Check {
   return validateReport(raw) ? { valid: true } : { valid: false, reason: validateReport.errors?.[0]?.message ?? "invalid" };
 }
 
-// Real runs: reports/*.json and traces/*.jsonl written by `netcoop demo` (git-ignored; empty on a fresh clone).
+const stem = (path: string) => path.split("/").pop()!.replace(/\.[^.]+$/, "");
+const titleOf = (name: string) => name.replace(/_/g, " ").replace(/\b(dns|dhcp)\b/g, (w) => w.toUpperCase())
+  .replace(/(\d) (\d|x)\b/, "$1.$2").replace(/^./, (c) => c.toUpperCase());
+
+// Real runs are git-ignored and empty on a fresh clone; `netcoop demo` writes them.
 const runReports = import.meta.glob<Record<string, unknown>>("../../reports/*.json", { eager: true, import: "default" });
 const runTraces = import.meta.glob<string>("../../traces/*.jsonl", { eager: true, query: "?raw", import: "default" });
+const samples = import.meta.glob<Record<string, unknown>>("../../examples/report_*.json", { eager: true, import: "default" });
 
-function traceFeed(incident: string): FeedItem[] | undefined {
-  const text = Object.entries(runTraces).find(([path]) => path.endsWith(`/${incident}.jsonl`))?.[1];
-  if (!text) return undefined;
-  return text.split("\n").filter((line) => line.trim()).map((line) => JSON.parse(line) as Record<string, unknown>)
-    .filter((rec) => rec.kind === "message")
-    .map(({ kind: _kind, ...raw }) => { // `kind` is the trace line's tag, not part of the envelope
+// Scenario names for the incident list. malformed_input.json is deliberately not valid JSON.
+const incidentIds = import.meta.glob<string>(["../../scenarios/dev/*.json", "!../../scenarios/dev/malformed_input.json"], { eager: true, import: "incident_id" });
+const complaints = import.meta.glob<string>(["../../scenarios/dev/*.json", "!../../scenarios/dev/malformed_input.json"], { eager: true, import: "complaint" });
+const scenarioOf = new Map(Object.entries(incidentIds).map(([path, id]) => [id, { name: stem(path), complaint: complaints[path] }]));
+
+function loadTrace(name: string): Pick<RunItem, "trace" | "traceError" | "wire"> {
+  // Keyed by report file name: a --control report shares its incident_id with the normal run.
+  const text = Object.entries(runTraces).find(([path]) => stem(path) === name)?.[1];
+  if (!text) return {};
+  try {
+    const lines = text.split("\n").filter((line) => line.trim()).map((line) => JSON.parse(line) as Record<string, unknown>);
+    const trace = lines.filter((rec) => rec.kind === "message").map(({ kind: _kind, ...raw }): FeedItem => { // `kind` tags the trace line, it is not part of the envelope
       const check = checkMessage(raw);
-      return { file: String(raw.message_id), raw, message: check.valid ? (raw as unknown as Envelope) : null, check };
+      return { id: String(raw.message_id), raw, message: check.valid ? (raw as unknown as Envelope) : null, check };
     });
+    const rec = lines.find((line) => line.kind === "wire");
+    const count = (body: unknown) => ((body as { messages?: unknown[] } | null)?.messages ?? []).length;
+    const wire = rec && { httpStatus: (rec.http_status as number | null) ?? null, error: (rec.error as string | null) ?? null, sent: count(rec.request), received: count(rec.response) };
+    return { trace, wire };
+  } catch (exc) {
+    return { traceError: `traces/${name}.jsonl could not be read: ${String(exc)}` };
+  }
 }
 
-export const reports: ReportItem[] = [
-  ...Object.entries(runReports).sort(([a], [b]) => a.localeCompare(b)).map(([path, raw]) => ({
-    file: path.split("/").pop()!, report: raw as unknown as Report, check: checkReport(raw),
-    trace: traceFeed(String(raw.incident_id)),
-  })),
-  ...Object.keys(byName).filter((name) => name.startsWith("report_")).sort().map((name) => ({
-    file: `${name}.json`, report: byName[name] as unknown as Report, check: checkReport(byName[name]),
-  })),
-];
+function runItem(path: string, raw: Record<string, unknown>): RunItem {
+  const name = stem(path);
+  const incident = String(raw.incident_id);
+  const scenario = scenarioOf.get(incident);
+  const isControl = name.endsWith("--control");
+  return {
+    file: `${name}.json`, report: raw as unknown as Report, check: checkReport(raw), sample: false, isControl,
+    title: titleOf(scenario?.name ?? incident.replace(/^INC-/, "")) + (isControl ? " (control)" : ""),
+    complaint: scenario?.complaint, ...loadTrace(name),
+  };
+}
+
+// A control run is listed right after the run it is compared with.
+const order = (path: string) => (path.endsWith("--control.json") ? path.replace("--control.json", ".json~") : path);
+export const runs: RunItem[] = Object.entries(runReports).sort(([a], [b]) => order(a).localeCompare(order(b))).map(([path, raw]) => runItem(path, raw));
+
+export const sampleReports: RunItem[] = Object.entries(samples).sort(([a], [b]) => a.localeCompare(b)).map(([path, raw]) => ({
+  file: `${stem(path)}.json`, title: titleOf(stem(path).replace(/^report_/, "")), report: raw as unknown as Report,
+  check: checkReport(raw), sample: true, isControl: false,
+}));
+
+export const controlTwin = (item: RunItem): RunItem | undefined =>
+  runs.find((r) => r.isControl && r.report.incident_id === item.report.incident_id);
+export const normalTwin = (item: RunItem): RunItem | undefined =>
+  runs.find((r) => !r.isControl && r.report.incident_id === item.report.incident_id);

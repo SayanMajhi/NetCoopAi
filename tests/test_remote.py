@@ -58,7 +58,7 @@ def test_real_service_round_trip_keeps_both_bodies() -> None:
     assert reply.request_body == bundle().model_dump(mode="json")
     assert reply.response_body == {"messages": reply.messages}
     supports = [m["payload"]["hypothesis"] for m in reply.messages if m["payload"]["stance"] == "supports"]
-    assert supports == []                                # no peers: no campus-wide health claim (R1)
+    assert supports == []                                # no peers: no campus-wide health claim
     assert reply.messages                                # the DNS view still comes back
 
 

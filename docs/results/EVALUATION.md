@@ -1,26 +1,34 @@
-# Phase 4 results — held-out evaluation
+# Held-out evaluation
 
-Everything ARCHITECTURE §7 asks for, produced by `netcoop eval`. Each run directory under
-[`phase4/`](phase4/) has `summary.md` (tables), `summary.json` (every metric), `cases.json` (one row per case:
+Everything [ARCHITECTURE §7](../../ARCHITECTURE.md#7-evaluation) asks for, produced by `netcoop eval`. Each run directory under
+[`runs/`](runs/) has `summary.md` (tables), `summary.json` (every metric), `cases.json` (one row per case:
 label, answer, outcome, affected-ID check, dangling evidence), and, for every case that was not exact, its input
 fixture, report (JSON and Markdown) and full message trace.
 
-**Frozen:** thresholds, weights and gates in `netcoop/config/signatures-1.0.yaml` are unchanged since `ed288c2`
-(`git diff ed288c2 -- netcoop/config/` is empty). Connectivity runs in-process; run 3 at σ 0 was repeated against
-the live REST service (`--endpoint http://127.0.0.1:8001`) and gave identical rows for all 240 cases.
+**Configuration.** The runs below were produced with thresholds, weights and gates unchanged since `ed288c2`. Connectivity
+runs in-process; run 3 at σ 0 was repeated against the live REST service (`--endpoint http://127.0.0.1:8001`) and gave
+identical rows for all 240 cases.
 
-## How the held-out set was made (P4-4)
+**Re-run on the final code.** After these runs were archived, the code changed: reported confidence is now capped by
+status and limitations are richer, and two signatures were edited (`weak_wifi`: AP-uplink health moved from required to
+corroborating; `hardware_failure`: no corroboration required). So the archived `cases.json` files no longer match byte
+for byte. We re-ran runs 2 and 3 on the final code with the same commands: across all 1,200 cases every `status`,
+`hypothesis`, `outcome`, label and affected-ID check is identical, and only the `confidence` and `limitations` columns
+differ. All metrics in `summary.json` are unchanged. Run 1 used the pre-fix rule and is kept as history; it cannot be
+reproduced on the current code.
+
+## How the held-out set was made
 
 - Generator: [`netcoop/evaluation/heldout.py`](../../netcoop/evaluation/heldout.py), committed in `fe2e9ee`
   **before any held-out case was run**. It imports no agent, decision code, `labels.json` or YAML; each label
   follows from the fault it overlays, by the rules in `LABEL_RULES` (repeated in every `summary.json`).
-- 8 classes, round-robin, so every class has the same count: `healthy`, **`busy_healthy`** (P4-0: 80–93 %
+- 8 classes, round-robin, so every class has the same count: `healthy`, **`busy_healthy`** (80–93 %
   utilization, spiky or steady, normal latency, background drops < 10/interval), `link_congestion`,
   `interface_fault`, `weak_wifi`, `dns_failure`, `dhcp_failure`, `stale_telemetry`.
 - Different from `scenarios/dev`: seeds `S × 10 000 + i` (dev: 101–116); window ends on 2026-11-02..09 with poll
   jitter (samples 40–80 s apart; dev: exactly 60 s on 11-01); congestion on access links, interface faults on links
   dev never faults, weak Wi-Fi on `DEPT_AP_01`, probe and DNS/DHCP-client positions drawn at random; metric mixes
-  (congestion seen via latency only / drops only / both; interface faults via errors / flaps / both; P4-3
+  (congestion seen via latency only / drops only / both; interface faults via errors / flaps / both;
   one-source DNS/DHCP + reachability; stale or missing key telemetry).
 - Seeds used: run 1 and 2: 1–5; run 3: 6–10. 48 cases per seed, 240 per run.
 
@@ -37,7 +45,7 @@ the live REST service (`--endpoint http://127.0.0.1:8001`) and gave identical ro
 | evidence-link integrity | 100 % |
 | ERROR messages | 0 |
 
-The 3 misses were all `link_congestion` (traces in `phase4/run1-preregistered-seeds1-5/`): two abstained
+The 3 misses were all `link_congestion` (traces in `runs/run1-preregistered-seeds1-5/`): two abstained
 (INC-H3-018, INC-H5-026, "latency only") and one was `probable` instead of `diagnosed` (INC-H3-034).
 
 **Root cause (a bug, not a threshold):** Performance (`_streak`) and Correlation (`sustained_run`) took the poll
@@ -53,7 +61,7 @@ weight or gate changed. Because seeds 1–5 had now been seen, the fix was confi
 
 ## Run 3 — fresh seeds 6–10 (never looked at before the fix)
 
-| σ (AI 3's noise) | exact | right cause, other status | abstained | wrong diagnosis | hedged wrong | false diagnosis (no-fault) | healthy abstention | affected IDs | evidence integrity |
+| σ (noise) | exact | right cause, other status | abstained | wrong diagnosis | hedged wrong | false diagnosis (no-fault) | healthy abstention | affected IDs | evidence integrity |
 |---|---|---|---|---|---|---|---|---|---|
 | 0 | 240 | 0 | 0 | 0 | 0 | 0 / 90 | 0 % | 100 % | 100 % |
 | 0.05 | 240 | 0 | 0 | 0 | 0 | 0 / 90 | 0 % | 100 % | 100 % |
@@ -69,14 +77,14 @@ Protocol counts (run 3, σ 0): 720 TASK, 3 571 FINDING, 90 QUERY, 90 RESPONSE, 2
 
 ### A wrong / abstained case, with its trace
 
-`run3-fresh-seeds6-10-sigma0.10/cases/INC-H8-018` (seed 80018, congestion on `ACC_LINK_07`, latency only).
+[`runs/run3-fresh-seeds6-10-sigma0.10/cases/`](runs/run3-fresh-seeds6-10-sigma0.10/cases/) `INC-H8-018` (seed 80018, congestion on `ACC_LINK_07`, latency only).
 Noise moved throughput independently of utilization: at 13:50:03 the measured utilization is 100 % but
-throughput/capacity says 78 %. The normalizer's cross-check (Phase 3 R2) marks the measured sample `malformed`
+throughput/capacity says 78 %. The normalizer's cross-check marks the measured sample `malformed`
 because the two disagree on the verdict (critical vs warn), which leaves a hole in the run, so no sustained run of 3
 remains and the system answers `insufficient_evidence` with "collect fresh measurements". With contradicting
 sources, abstaining is the intended answer; it is **recorded, not tuned**. INC-H8-026 is the same pattern.
 
-## P4-3 — one source for DNS/DHCP and reachability
+## One source for DNS/DHCP and reachability
 
 | variant | answers (run 3, σ 0) | answers (run 1) |
 |---|---|---|
@@ -88,18 +96,18 @@ sources, abstaining is the intended answer; it is **recorded, not tuned**. INC-H
 Effect: with DNS checks and reachability from the same source, the right cause is still found every time, but the
 answer is capped at `probable` (limitation "evidence from fewer than two independent raw sources"), as intended.
 
-## P4-0 — busy but healthy links
+## Busy but healthy links
 
 `busy_healthy` (30 per run, half spiky 80–93 %, half steady 84–93 %): `insufficient_evidence` in every run and at
-every σ; **0 false diagnoses**. Before the P4-0 fix, AI 3's spiky variant gave `probable link_congestion 0.74`.
+every σ; **0 false diagnoses**. Before the fix for this case, the AI reviewer's spiky variant gave `probable link_congestion 0.74`.
 
 ## Known behaviour, recorded and not tuned
 
-- Dev noise sweep, σ 0.15 (AI 3, seeds 11–40): 2 wrong diagnoses on `ambiguous_congestion_errors` (e.g. seed 18),
+- Dev noise sweep, σ 0.15 (AI reviewer, seeds 11–40): 2 wrong diagnoses on `ambiguous_congestion_errors` (e.g. seed 18),
   where noisy utilization (86.8, 100, 76.7, 100, 55.6) really does refute sustained congestion while the interface
   signature passes. Defensible; not tuned.
-- Dev σ 0.10 seed 7: hedged `probable interface_fault` with `link_congestion` as the alternative. AI 3 confirmed
-  this is the right answer; `tests/test_noise_robustness.py` is unchanged.
+- Dev σ 0.10 seed 7: hedged `probable interface_fault` with `link_congestion` as the alternative, which the AI reviewer
+  accepted as the right answer; `tests/test_noise_robustness.py` is unchanged.
 - Held-out σ ≥ 0.10: congestion abstains when noisy throughput contradicts measured utilization (above).
 
 ## Honest limits of these numbers
@@ -110,4 +118,6 @@ every σ; **0 false diagnoses**. Before the P4-0 fix, AI 3's spiky variant gave 
   telemetry or on a different team's fault model.
 - Classes are clear-cut by construction except `busy_healthy` and `stale_telemetry`; there are no held-out
   two-fault (ambiguous) incidents. Those exist only in dev (`ambiguous_congestion_errors`).
-- Reproduce: `netcoop eval --n 48 --seed 6 7 8 9 10 --noise 0.10` (writes `eval/…`; deterministic).
+- `hardware_failure` and `device_overload` are not held-out classes; they are covered by unit tests only.
+- Reproduce: `netcoop eval --n 48 --seed 6 7 8 9 10 --noise 0.10` (writes `eval/…`; deterministic). Regression fixtures
+  and tests are separate from this: `scenarios/dev` was visible during development and is not accuracy evidence.

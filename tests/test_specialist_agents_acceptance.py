@@ -1,8 +1,8 @@
-"""Phase 2 acceptance criteria (docs/PHASE2_TASKS.md), checked with the real normalizer,
+"""Specialist-agent acceptance criteria, checked with the real normalizer,
 agents and Connectivity logic on the labelled scenarios in scenarios/dev/.
 
 Connectivity runs in-process here (local transport); the same Bundle crosses real HTTP
-in tests/test_connectivity_service.py and in the live proof of the Phase 2 review pack.
+in tests/test_connectivity_service.py and in tests/test_remote.py.
 """
 from __future__ import annotations
 
@@ -98,7 +98,7 @@ def test_connectivity_scopes_congestion_with_its_own_checks() -> None:
     assert not any(p["hypothesis"].startswith("upstream_dependency") for p in conn)
 
 
-# --------------------------------------------------------------------------- Phase 2 review (R1, R2, R4)
+# --------------------------------------------------------------------------- what each finding may claim
 
 @pytest.mark.parametrize("name, control", [(n, True) for n in FAULTS_NEEDING_PEERS] + [("missing_stale", False)])
 def test_r1_connectivity_never_supports_health(name: str, control: bool) -> None:
@@ -132,7 +132,7 @@ def test_r2_weak_wifi_checks_the_ap_uplink() -> None:
 
 
 def _with_extra_error_growth(name: str) -> dict:
-    """AI 3's probe: +1 interface error per minute on every interface_errors series."""
+    """+1 interface error per minute on every interface_errors series."""
     fixture = json.loads((DEV / f"{name}.json").read_text(encoding="utf-8"))
     seen: dict[str, int] = {}
     for record in fixture["records"]:

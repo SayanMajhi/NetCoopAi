@@ -1,4 +1,4 @@
-"""Phase 3 acceptance criteria (docs/PHASE3_TASKS.md) with the real pipeline and scenarios.
+"""Correlation and report acceptance criteria with the real pipeline and scenarios.
 
 labels.json is read here, by the test, never by runtime code.
 """
@@ -83,14 +83,14 @@ def test_cited_evidence_exists_in_the_incident() -> None:
 
 @pytest.mark.parametrize("name", [n for n in sorted(LABELS) if LABELS[n]["status"] == "diagnosed"])
 def test_diagnosis_cites_two_independent_raw_sources(name: str) -> None:
-    """C1: ARCHITECTURE §7 "the report cites two distinct raw sources"."""
+    """The report cites two distinct raw sources (ARCHITECTURE §7)."""
     report = run(name).report
     assert len({e.source_id for e in report.supporting_evidence}) >= 2
 
 
 @pytest.mark.parametrize("name", WITH_CANDIDATES)
 def test_confidence_is_computed_not_a_placeholder(name: str) -> None:
-    """C2: heuristic-v1 everywhere a hypothesis exists."""
+    """heuristic-v1 everywhere a hypothesis exists."""
     report = run(name).report
     assert report.confidence_method == "heuristic-v1" and 0 < report.confidence <= 1
 
@@ -172,11 +172,11 @@ def test_deterministic() -> None:
     assert [m.model_dump(mode="json") for m in a.messages] == [m.model_dump(mode="json") for m in b.messages]
 
 
-# --------------------------------------------------------------------------- Phase 3 review (R1, R4)
+# --------------------------------------------------------------------------- unresolved rivals and on-demand probes
 
 
 def _r1_case() -> dict:
-    """AI 3's noise-free reproduction: utilization samples 1, 2, 5 on DEPT_UPLINK_01 missing, no throughput."""
+    """Noise-free reproduction: utilization samples 1, 2, 5 on DEPT_UPLINK_01 missing, no throughput."""
     fixture = load("ambiguous_congestion_errors.json")
     i = 0
     for record in fixture["records"]:

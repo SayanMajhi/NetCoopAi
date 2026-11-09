@@ -1,0 +1,233 @@
+# Topology, message bus and the Connectivity REST service
+
+Three pieces the rest of the system builds on:
+
+| Piece | File | Used by |
+|---|---|---|
+| **Campus topology** | `scenarios/topology.json` | Connectivity (blast radius), Reporting (affected-ID check), normalizer (device IDs) |
+| **Message bus + event log** | `netcoop/orchestrator/bus.py`, `netcoop/orchestrator/eventlog.py` | Orchestrator: every message between agents goes through `MessageBus.deliver()` |
+| **Connectivity agent (REST)** | `connectivity_service/app.py` | The one agent that runs as a separate process, so the protocol is a real wire contract |
+
+## Quick start
+
+From the repo root:
+
+```bash
+pip install -e ".[dev]"
+```
+
+```bash
+pytest -q tests/test_topology.py tests/test_bus.py tests/test_connectivity_service.py
+```
+
+```bash
+uvicorn connectivity_service.app:app --port 8001
+```
+
+Then open http://localhost:8001/docs to try the service in the browser.
+
+## 1. Campus topology — `scenarios/topology.json`
+
+14 devices and 13 links, arranged as a tree. Each node has `id`, `type` and `zone`, plus a
+readable `label`. Each link has `link_id`, `a`, `b` and `capacity_mbps`.
+
+| ID | Type | Zone | Role |
+|---|---|---|---|
+| `CORE_RTR_01` | router | core | Campus core router |
+| `SRV_DNS_DHCP_01` | server | datacenter | DNS/DHCP server (`services: ["dns", "dhcp"]`) |
+| `SW_CAMPUS_1` | distribution_switch | hostel | Hostel distribution |
+| `SW_CAMPUS_2` | distribution_switch | department | Department distribution |
+| `SW_CAMPUS_3`–`6` | access_switch | hostel | Hostel blocks A–D |
+| `SW_CAMPUS_7`–`10` | access_switch | department | CSE, EE, lecture hall, library |
+| `HOSTEL_AP_01` | access_point | hostel | Hostel block A Wi-Fi (on `SW_CAMPUS_3`) |
+| `DEPT_AP_01` | access_point | department | CSE Wi-Fi (on `SW_CAMPUS_7`) |
+
+```
+CORE_RTR_01 ─┬─ HOSTEL_UPLINK_01 ── SW_CAMPUS_1 ─┬─ SW_CAMPUS_3 ── HOSTEL_AP_01
+             │                                    ├─ SW_CAMPUS_4
+             │                                    ├─ SW_CAMPUS_5
+             │                                    └─ SW_CAMPUS_6
+             ├─ DEPT_UPLINK_01 ──── SW_CAMPUS_2 ─┬─ SW_CAMPUS_7 ── DEPT_AP_01
+             │                                    ├─ SW_CAMPUS_8
+             │                                    ├─ SW_CAMPUS_9
+             │                                    └─ SW_CAMPUS_10
+             └─ SRV_LINK_01 ─────── SRV_DNS_DHCP_01
+```
+
+Design decisions:
+
+- **Generator IDs are used as-is.** The organizer generator emits device IDs
+  `SW_CAMPUS_1`–`SW_CAMPUS_10` (B3). All ten are topology switches, so any untouched
+  generator output maps to a known device without renaming.
+- **Links and capacities are ours.** The generator supplies no links. Uplinks are
+  1000 Mbps and the server link is 10000 Mbps.
+- **Shared upstream for blast radius.** `HOSTEL_UPLINK_01` is the only path from the core
+  to every hostel device. Cutting it isolates the whole hostel and nothing else.
+- **One uplink per switch.** The generator's `link_utilization_pct` has no link ID. Because
+  each switch has exactly one uplink (for example `SW_CAMPUS_5` → `ACC_LINK_05`), the
+  normalizer can attribute the metric to that link and record it as a derived step.
+
+`tests/test_topology.py` checks required fields, unique IDs, links pointing at real nodes,
+the device count and roles, full connectivity, the shared upstream, the presence of all
+generator IDs, and one uplink per switch.
+
+## 2. Message bus — `netcoop/orchestrator/bus.py`
+
+```python
+from netcoop.orchestrator.bus import MessageBus
+from netcoop.orchestrator.eventlog import EventLog
+
+bus = MessageBus(EventLog("traces/events.sqlite"))   # EventLog() = in memory
+envelope, error = bus.deliver(raw)                    # raw: dict, JSON str or bytes
+```
+
+`deliver()` returns `(envelope, None)` when the message is accepted and `(None, error_envelope)`
+when it is not. It never raises on bad input, and every attempt is logged. Checks, in order:
+
+| Step | Failure → `ErrorCode` |
+|---|---|
+| Parse JSON (must be an object) | `MALFORMED_JSON` |
+| `protocol` present | `MISSING_FIELD` (`field_path: protocol`) |
+| Version negotiation via `netcoop/protocol/compat.py` (1.x accepted, unknown fields moved to `extra`, 2.x rejected) | `SCHEMA_VERSION_UNSUPPORTED` |
+| Validate against the `Envelope` model and its typed payload | `MISSING_FIELD` / `INVALID_VALUE`, with a `field_path` such as `sender` or `payload.stance` |
+| `message_id` already accepted | `DUPLICATE_MESSAGE` (ignored; a rejected ID may be resent once fixed) |
+
+The error is itself a valid `netcoop/1.0` ERROR envelope:
+
+- `message_id`: `<incident_id>-BUS-ERR-01`, `-02`, … (`UNKNOWN` when the incident ID is unreadable)
+- `in_reply_to` and `payload.offending_message_id`: the rejected message's ID
+- `sender`: `orchestrator`; `recipient`: the original sender
+- `payload`: `code`, `detail`, `field_path`
+
+Conversion notes from `compat.py` (for example "accepted netcoop/1.3 as netcoop/1.0") are kept
+in `bus.conversions[message_id]`.
+
+## 3. Event log — `netcoop/orchestrator/eventlog.py`
+
+One SQLite table, `events`, with exactly the spec's columns plus an auto-increment `seq`
+for arrival order:
+
+```
+seq, message_id, incident_id, sender, recipient, type, protocol,
+in_reply_to, valid, error, body_json, received_at
+```
+
+- `record(body, valid=..., error=..., body_json=...)` writes one row. Header fields are read
+  safely from a possibly malformed body; anything missing or not a string is stored as NULL.
+- `rows(incident_id=None)` returns rows as dicts in arrival order.
+- `body_json` keeps the exact text received, even when it is not valid JSON.
+- `received_at` is wall-clock UTC, kept for operations and excluded from reproducibility checks.
+
+## 4. Connectivity agent — `connectivity_service/app.py`
+
+A FastAPI app that runs as its own process:
+
+```bash
+uvicorn connectivity_service.app:app --port 8001
+```
+
+The event log is in memory by default. To keep it in a file, set `NETCOOP_CONNECTIVITY_DB`.
+
+Bash:
+
+```bash
+NETCOOP_CONNECTIVITY_DB=traces/connectivity.sqlite uvicorn connectivity_service.app:app --port 8001
+```
+
+PowerShell:
+
+```powershell
+$env:NETCOOP_CONNECTIVITY_DB="traces/connectivity.sqlite"; uvicorn connectivity_service.app:app --port 8001
+```
+
+| Endpoint | What it does |
+|---|---|
+| `GET /card` | The agent card (same as `connectivity_agent` in `netcoop/protocol/cards.py`) |
+| `POST /messages` | Receives a **Bundle** and replies with a Bundle |
+| `GET /events` | The event-log rows as JSON |
+
+A Bundle (`schemas/bundle-1.0.json`) is `{"messages": [...], "observations": [...], "topology": {...}}`.
+`messages[0]` is the TASK addressed to `connectivity_agent`; the rest are the peer FINDINGs
+it may use. The service validates with **jsonschema** (format checker on): the Bundle against
+`schemas/bundle-1.0.json` and each message against `schemas/message-1.0.json`, not the Python
+models, so the generated wire contract is what is enforced.
+
+| Request | HTTP | Reply Bundle holds |
+|---|---|---|
+| Valid Bundle | 200 | `RESPONSE` to the TASK (`in_reply_to` = TASK ID, addressed to its sender) |
+| Not JSON / not an object | 400 | `ERROR` `MALFORMED_JSON` |
+| No `messages` (e.g. a bare envelope) / empty list | 400 | `ERROR` `MISSING_FIELD` / `INVALID_VALUE`, `field_path` `messages` |
+| Bad observation / unknown top-level field | 400 | `ERROR` `INVALID_VALUE` + `field_path` (e.g. `observations.0.observed_at`) |
+| Bad TASK (missing field, bad value, `2.x`) | 400 | typed `ERROR`, `field_path` like `messages.0.sender` |
+| `messages[0]` not a TASK / TASK for another agent | 400 | `ERROR` `INVALID_VALUE` / `UNKNOWN_RECIPIENT` |
+| Bad or `2.x` peer message | 200 | `RESPONSE` to the TASK **plus** an `ERROR` for that peer (`messages.N...`); the peer is dropped |
+| Same `message_id` twice in one Bundle | 200 | `ERROR` `DUPLICATE_MESSAGE` for the repeat; ignored and logged |
+
+Every message in the Bundle gets its own event-log row. Unknown top-level fields on a `1.x`
+message are moved into `extra`. Outgoing messages are validated against the schema before they
+are sent; the RESPONSE carries the TASK's timestamp (the incident clock) so runs are reproducible.
+
+**Each Bundle is one delivery.** Message IDs are deterministic per fixture, so a re-run (or the
+`--control` run, which reuses the TASK ID) sends the same IDs again. Duplicates are therefore
+detected inside a Bundle, and reply IDs restart at `CONN-01` for every request.
+
+Example (from the repo root; `curl.exe` in PowerShell):
+
+```bash
+curl -i -H "Content-Type: application/json" --data @examples/wire/bundle.json localhost:8001/messages
+```
+
+Its peer FINDING **supports** `link_congestion@HOSTEL_UPLINK_01`, so the reply is a scope finding on that hypothesis citing only Connectivity's own check `EV-015` (SW_CAMPUS_3 reachable), with `consumed_message_ids: ["INC-0001-INF-02"]`.
+`examples/wire/bundle_bad_peer.json` is the same Bundle with `stance` removed from the peer FINDING: HTTP 200, a RESPONSE for the TASK and an ERROR `MISSING_FIELD` at `messages.1.payload.stance`.
+
+### Connectivity reasoning — `connectivity_service/logic.py`
+
+`handle_bundle(messages, observations, topology)` is the agent (`connectivity_agent`, IDs `CONN`).
+It reads the topology as a tree (each link runs from `a`, towards the core, to `b`) and never
+needs thresholds: the checks it owns are booleans. Missing, stale or malformed checks are unknown.
+
+| Evidence | Finding |
+|---|---|
+| `dns_success` / `dhcp_success` false on clients, server (`services` in topology) reachable | `dns_failure` / `dhcp_failure@SRV_DNS_DHCP_01` supports (0.8 for ≥ 2 clients and server known reachable, else 0.6) |
+| Same, but the server itself is unreachable | `upstream_dependency@SRV_LINK_01` **contradicts** `dns_failure` / `dhcp_failure` |
+| Every client's check succeeds | `healthy@SRV_DNS_DHCP_01` **contradicts** `dns_failure` / `dhcp_failure` |
+| ≥ 2 distinct fault targets (peer-named, or own unreachable devices) behind one link that is not itself named | `upstream_dependency@<that link>` (or `@<switch>` when the switch just below still answers), citing **only its own** checks in the blast radius; consumes the peers involved |
+| **One peer-named fault** (a `supports` finding, or a `contradicts` finding offering a different hypothesis; "X contradicts X" only means "not X" and is ignored, see PROTOCOL.md "Reading stance") | a **scope** finding on the peer's own hypothesis (e.g. `link_congestion@HOSTEL_UPLINK_01` supports): blast radius and how its own reachability/service checks in that radius look; evidence = **its own checks only**, never the peer's IDs; the peer is referenced in `consumed_message_ids`. No own check in the radius → nothing, plus a RESPONSE saying so |
+| A peer names `weak_wifi@<AP>` | checks the AP **uplink** with its own path evidence (link loss vs `packet_loss_pct.warn`, reachability of the parent switch): healthy → `healthy@<uplink>` **contradicts** `upstream_dependency@<uplink>`; lossy/unreachable → `upstream_dependency@<uplink>` supports. Never blames the uplink from RSSI |
+| Every device behind a link answered, and no observation in the Bundle is missing/stale | `healthy@<link>` **contradicts** `upstream_dependency@<link>` (a statement about that path only) |
+| No checks of its own and no usable peers | a `RESPONSE` saying it cannot judge |
+
+Connectivity **never supports `healthy@…`**: it does not claim a campus, a zone or a link is healthy overall, only that a specific path is not an upstream dependency.
+
+So the peers change the conclusion: on congestion the normal run adds a scope finding
+`link_congestion@HOSTEL_UPLINK_01` supports (blast radius, all checked devices answering: a
+degradation, not an outage), consuming the Performance/Infrastructure findings; the `--control`
+run, with no peers, has no such finding. Peer evidence IDs that are not in the Bundle are
+rejected with `UNKNOWN_EVIDENCE`. If the analysis crashes, the service answers HTTP 500 with a
+typed `AGENT_FAILURE` ERROR; a bad input never does (the typed models run after the JSON Schema,
+so e.g. a trailing newline under a `$` pattern is `INVALID_VALUE`, logged `valid = 0`).
+
+### Remote client — `netcoop/orchestrator/remote.py`
+
+`send_bundle(bundle, endpoint, *, timeout=5.0, retries=1)` is how the orchestrator reaches the
+Connectivity process (`netcoop run` without `--local`; `--endpoint` overrides the card's
+`http://127.0.0.1:8001`). It posts the Bundle to `<endpoint>/messages` with `httpx` and returns a
+`ConnectivityReply`: the raw reply messages (the bus validates each one), the raw request and
+response bodies for `traces/<incident>.jsonl`, and the HTTP status. It **never raises**.
+
+| What happens | Retried? | `error` |
+|---|---|---|
+| 2xx Bundle | — | `None` |
+| Connection refused / timeout | once | `AGENT_TIMEOUT: connectivity_unreachable: ...` → report limitation; the run cannot end `diagnosed` or `healthy` (at most `probable`) |
+| 502 / 503 / 504 | once | as the final reply |
+| 4xx / 500 with an ERROR Bundle | no (the agent's typed answer) | `AGENT_FAILURE: HTTP <n>: <code>: <detail>`; the ERRORs still go through the bus |
+| Not JSON / not a Bundle | no | `AGENT_FAILURE: HTTP <n>: ...`; the raw body is kept for the trace |
+| Anything unexpected | no | `AGENT_FAILURE: <exception>` |
+
+## Tests
+
+`tests/test_topology.py`, `test_bus.py`, `test_connectivity_service.py`, `test_connectivity_logic.py` and `test_remote.py` cover this part of the system; `test_failure_recovery.py` covers a Connectivity agent that does not answer.
+
+```bash
+pytest -q tests/test_topology.py tests/test_bus.py tests/test_connectivity_service.py tests/test_connectivity_logic.py tests/test_remote.py
+```

@@ -1,5 +1,4 @@
-"""Shared agent plumbing. Agents import only netcoop.protocol, this module and
-config — never each other."""
+"""Shared agent plumbing. Agents exchange conclusions only as validated messages."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field

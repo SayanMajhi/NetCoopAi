@@ -96,7 +96,7 @@ class NormalizeTests(unittest.TestCase):
         self.assertTrue(any("disagree about the verdict" in entry for entry in result.normalization_log))
 
     def test_utilization_cross_check_keeps_agreeing_evidence(self):
-        """Phase 3 review R2: AI 3's three noisy pairs both say 'above 90 %'; keep them, log the mismatch."""
+        """Three noisy pairs both say 'above 90 %'; keep them, log the mismatch."""
         pairs = [(92.70, 1041), (93.56, 1018), (97.74, 904)]           # (measured %, throughput Mbps on 1 Gbps)
         fixture = {"window_end": "2026-11-01T10:05:00Z", "records": [
             {"timestamp": f"2026-11-01T10:0{i}:30Z", "link_id": "DEPT_UPLINK_01",

@@ -6,7 +6,7 @@ faults they name to the deepest link they all depend on, and lists those peers i
 `consumed_message_ids`. Without peers it can only judge its own service and path
 checks, so the same evidence gives a different conclusion (the --control run).
 
-What it may claim (Phase 2 review, R1/R2):
+What it may claim:
 - Only from its OWN evidence (reachability / DNS / DHCP checks, and link loss for an
   AP uplink). It never re-cites a peer's evidence IDs; peers are referenced through
   `consumed_message_ids`.
@@ -300,7 +300,8 @@ class ConnectivityAgent(BaseAgent):
                 if answers(parent) or any(answers(d) for d in below):
                     break                      # something under the parent still answers: stop at `node`
                 node = parent
-            beside = [d for d in topo.radius(topo.links[topo.parent_link[node]]["a"]) if d not in topo.radius(node)]                 if node in topo.parent_link else []
+            beside = ([d for d in topo.radius(topo.links[topo.parent_link[node]]["a"]) if d not in topo.radius(node)]
+                      if node in topo.parent_link else [])
             if not any(answers(d) for d in beside):
                 continue                       # nothing nearby answers: a dead path, not a dead device
             suspects.setdefault(node, []).append(device)
@@ -421,5 +422,5 @@ class ConnectivityAgent(BaseAgent):
 
 def handle_bundle(messages: list[Envelope], observations: list[Observation],
                   topology: dict[str, Any]) -> list[Envelope]:
-    """Plug-in contract (docs/PHASE2_TASKS.md D5): messages[0] is the TASK, the rest are peers."""
+    """Plug-in contract: messages[0] is the TASK, the rest are peers."""
     return ConnectivityAgent().handle_bundle(messages, observations, topology)

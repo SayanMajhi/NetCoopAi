@@ -98,7 +98,7 @@ class ReportingAgent(BaseAgent):
             devices = [d for d in devices if topo.knows(d)]
             segments = [s for s in segments if topo.knows(s)]
 
-        # Every nominated candidate that the evidence did not refute (Phase 3 review R1).
+        # Every nominated candidate that the evidence did not refute.
         rivals = list(decision.get("alternatives", []))
         alternatives = [c.hypothesis for c in rivals]
         if status == Status.diagnosed and leader:
@@ -146,7 +146,7 @@ class ReportingAgent(BaseAgent):
 
 
 def _interval_delta(ctx: IncidentContext, o: Observation) -> Optional[float]:
-    """A cumulative counter means little alone (Phase 2 review P2-1): the increase since the previous
+    """A cumulative counter means little alone: the increase since the previous
     sample of the same target, metric and source. None after a gap or on a reset, never a negative number."""
     if o.metric not in COUNTERS or not isinstance(o.value, (int, float)) or isinstance(o.value, bool) \
             or "counter_reset" in o.quality_flags:
@@ -246,7 +246,8 @@ def _next_checks(leader: Optional[Candidate]) -> list[str]:
 def _healthy_samples(ctx: IncidentContext) -> list[Any]:
     latest: dict[tuple[Any, ...], Any] = {}
     for o in sorted(ctx.observations, key=lambda o: (o.observed_at, o.evidence_id)):
-        if o.value is not None and o.metric in ("latency_ms", "link_utilization_pct", "reachability", "dns_success"):
+        if o.value is not None and not set(EXCLUDED_FLAGS).intersection(o.quality_flags) \
+                and o.metric in ("latency_ms", "link_utilization_pct", "reachability", "dns_success"):
             latest[(o.device_id or o.link_id, o.metric, o.source_id)] = o
     return sorted(latest.values(), key=lambda o: o.evidence_id)[:8]
 

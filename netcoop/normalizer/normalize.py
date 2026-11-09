@@ -187,7 +187,7 @@ def _normalize_window(fixture: dict, topology: dict, signatures: dict) -> Normal
             skip(f"{code} {prefix}.timestamp: required timezone-aware timestamp; record skipped")
             continue
         raw_ts = record.get("timestamp")
-        if not raw_ts.endswith(("Z", "+00:00")):      # C5: non-UTC offsets are converted, and the log says so
+        if not raw_ts.endswith(("Z", "+00:00")):      # non-UTC offsets are converted, and the log says so
             result.normalization_log.append(f"{prefix}.timestamp {raw_ts} converted to UTC {observed_at.isoformat()}")
         device_id, link_id = record.get("device_id"), record.get("link_id")
         if bool(device_id) == bool(link_id) or not isinstance(device_id or link_id, str):

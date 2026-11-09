@@ -99,7 +99,7 @@ def test_peer_fault_gets_scope_from_own_checks_not_a_relabel() -> None:
 def test_control_run_without_peers_gives_a_different_conclusion() -> None:
     normal, _ = run(observations(CONGESTION), congestion_peers)
     control, _ = run(observations(CONGESTION))
-    assert hyps(control) == []                                  # R1: no campus-wide health claim
+    assert hyps(control) == []                                  # no campus-wide health claim
     assert all(p["consumed_message_ids"] == [] for p in control)
     assert set(hyps(normal)) != set(hyps(control))
     # the DNS view is the same either way: DNS succeeds, so it argues against dns_failure
@@ -198,7 +198,7 @@ def test_dns_failure_with_unreachable_server_points_at_the_path() -> None:
     [p] = [p for p in payloads if p["stance"] == "contradicts"]
     assert p["target_hypothesis"] == "dns_failure@SRV_DNS_DHCP_01"
     assert p["hypothesis"] == "upstream_dependency@SRV_LINK_01"
-    assert hyps(payloads) == []          # one unreachable device is not a shared-upstream story (R2)
+    assert hyps(payloads) == []          # one unreachable device is not a shared-upstream story
 
 
 def test_dhcp_failure_on_one_client_with_unknown_server_is_weaker() -> None:
@@ -272,7 +272,7 @@ def test_pipeline_with_real_infrastructure_and_connectivity() -> None:
     assert hyps(control) == []
 
 
-# --------------------------------------------------------------------------- Phase 2 review (R1, R2)
+# --------------------------------------------------------------------------- what Connectivity may claim
 
 
 def test_no_campus_wide_health_claim_even_when_everything_answers() -> None:

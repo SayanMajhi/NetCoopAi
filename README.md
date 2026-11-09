@@ -1,131 +1,247 @@
 # NetCoop AI
 
-Five specialist agents exchange **validatable evidence** over a versioned protocol (`netcoop/1.0`), challenge one another, and publish **one** evidence-based JSON diagnosis of a campus network fault. Data is synthetic; nothing touches a real network.
+Five specialist agents exchange validated evidence over a versioned protocol, verify each other's conclusions, and publish one explainable diagnosis of a campus network fault, or say plainly that the evidence is not enough.
 
-- Problem statement: [docs/problem_statement.pdf](docs/problem_statement.pdf)
-- Architecture: [ARCHITECTURE.md](ARCHITECTURE.md) · context for AI coding assistants: [CLAUDE.md](CLAUDE.md)
-- Phase plan and status: [docs/STATUS.md](docs/STATUS.md) · Phase 1 tasks: [docs/PHASE1_TASKS.md](docs/PHASE1_TASKS.md)
-- Protocol and field reference: [PROTOCOL.md](PROTOCOL.md), generated JSON Schemas in [schemas/](schemas/)
-- Organizer data and field mapping: [data/field_mapping.md](data/field_mapping.md)
-- Connectivity REST service: [docs/README_track_C.md](docs/README_track_C.md)
-- Demo plan: [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md)
+Built for the [NetCoop AI problem statement](docs/problem_statement.pdf). Agents are deterministic and rule-based. All telemetry is synthetic, and nothing touches a real network.
 
-## Setup (Python 3.12)
-```bash
-python -m venv .venv
-.venv\Scripts\activate          # macOS/Linux: source .venv/bin/activate
-pip install -e ".[dev]"
-pytest -q                       # 480+ tests
-```
+## Problem
 
-## Judge quickstart (one command)
-```bash
-netcoop demo        # runs all 17 labelled scenarios, prints expected vs got, writes reports/ + traces/
-```
-```
-scenario                     expected                   got                        conf  rejected inputs
-congestion                   diagnosed link_congestion  diagnosed link_congestion  0.95  -                           PASS
-ambiguous_congestion_errors  probable link_congestion   probable link_congestion   0.69  -                           PASS
-unsupported_2_x              insufficient_evidence      insufficient_evidence      0.00  SCHEMA_VERSION_UNSUPPORTED  PASS
-...
-17/17 scenarios match their label
-```
-Then open the dashboard on those real runs (report, one-line summary, every message of the trace incl. QUERY/RESPONSE, competing causes, interpreted evidence):
-```bash
-cd dashboard && npm install && npm run dev
-```
+A campus network fault rarely shows up in one place. Utilization lives on the switch, latency in a client probe, and DNS health in a service check. Those sources use different names, units and clocks, and some are missing or stale.
+
+Several causes can produce the same symptom: a saturated uplink and a failing interface both produce loss. A confident wrong answer costs more than no answer, because an engineer then replaces a cable that was never faulty.
+
+## Solution
+
+Each agent owns one part of the evidence and publishes findings as protocol messages. No single component reads everything and emits a label.
+
+- **Performance** and **Infrastructure** analyse their own signals, and may argue against a cause as well as for it.
+- **Connectivity** runs as a separate HTTP process. It receives their findings and works out what they mean for the topology.
+- **Correlation** re-checks every nominated cause against the raw evidence, queries the agent that owns a disputed measurement, and applies explicit gates. Agreement between agents earns nothing.
+- **Reporting** publishes the result, citing only evidence that exists.
+
+## Key capabilities
+
+| Capability | Where to verify it |
+|---|---|
+| Versioned protocol `netcoop/1.0` with generated JSON Schemas, 1.x tolerance, a 0.9 upgrade path and 2.x rejection | [PROTOCOL.md](PROTOCOL.md), [schemas/](schemas/), `netcoop run scenarios/dev/schema_0_9.json` |
+| An agent in its own process, validating against the exported schema | [docs/CONNECTIVITY_SERVICE.md](docs/CONNECTIVITY_SERVICE.md), [examples/wire/](examples/wire/) |
+| Evidence-based comparison of competing causes, each with supporting and contradicting findings | Dashboard, "Competing causes" |
+| Bounded verification: at most two QUERY rounds per attempt, on-demand probes when available | `scenarios/dev/ambiguous_congestion_errors.json` |
+| Contradiction and uncertainty handling: `probable` names its open rival, `insufficient_evidence` names no cause | `limitations` in every report |
+| Typed errors at every boundary; a failed component degrades the report and never crashes the run | [ARCHITECTURE.md §6](ARCHITECTURE.md#6-failure-handling), `tests/test_failure_recovery.py` |
+| Reproducible evaluation on a held-out generator, with every run and non-exact case archived | [docs/results/EVALUATION.md](docs/results/EVALUATION.md) |
+
+## Architecture
 
 ```mermaid
 flowchart LR
-  T[raw telemetry<br/>organizer format] --> N[Normalizer<br/>units, aliases, quality flags]
-  N --> O{{Orchestrator + MessageBus<br/>validates every message,<br/>typed ERRORs}}
-  O -- TASK --> P[Performance agent]
-  O -- TASK --> I[Infrastructure agent]
-  P -- FINDING --> O
-  I -- FINDING --> O
-  O -- "HTTP POST Bundle<br/>(peer findings)" --> C[Connectivity agent<br/>separate REST process]
-  C -- FINDING --> O
-  O --> K[Correlation agent<br/>signatures + heuristic-v1]
-  K -- "QUERY (≤2 rounds)" --> P & I
-  P & I -- RESPONSE --> K
-  K -- DECISION --> R[Reporting agent]
-  R --> J[(report JSON + Markdown<br/>+ JSONL trace)]
+  T["Raw telemetry<br/>scenario or organizer format"] --> N["Normalizer<br/>units, aliases, windows,<br/>quality flags"]
+  N -- "Observations with<br/>evidence IDs" --> O{{"Orchestrator + message bus<br/>validates every message,<br/>typed ERRORs, trace"}}
+
+  O -- TASK --> P["Performance"]
+  O -- TASK --> I["Infrastructure"]
+  P -- "FINDING<br/>supports / contradicts" --> O
+  I -- "FINDING<br/>supports / contradicts" --> O
+
+  O -- "HTTP POST Bundle:<br/>TASK + peer FINDINGs<br/>+ evidence + topology" --> C["Connectivity<br/>separate process<br/>validates exported schema"]
+  C -- "FINDING with<br/>consumed_message_ids" --> O
+
+  O -- "all FINDINGs" --> K["Correlation<br/>re-checks signatures,<br/>heuristic-v1, gates"]
+  K -- "QUERY (at most 2 rounds)" --> P
+  K -- "QUERY (at most 2 rounds)" --> I
+  P -- "RESPONSE, new evidence IDs" --> K
+  I -- "RESPONSE, new evidence IDs" --> K
+  K -- "DECISION: ranking, status,<br/>limitations" --> R["Reporting"]
+  R --> J[("report JSON + Markdown<br/>JSONL trace with HTTP bodies")]
 ```
 
-## Run
+Details and decision gates: [ARCHITECTURE.md](ARCHITECTURE.md).
+
+## Quick start
+
+Requires **Python 3.12** and, for the dashboard, **Node.js 22 or newer**. Run everything from the repository root.
+
 ```bash
-# terminal 1 - the Connectivity agent as its own process
-uvicorn connectivity_service.app:app --port 8001
-
-# terminal 2 - diagnose a scenario (report -> reports/, trace with HTTP bodies -> traces/)
-netcoop run scenarios/dev/congestion.json
-netcoop run scenarios/dev/congestion.json --control   # Connectivity gets no peer findings: its answer changes
-netcoop run scenarios/dev/congestion.json --local     # Connectivity in-process (no server needed)
-netcoop run data/generator_raw/hardware_failure_unseeded.json   # untouched organizer output (1 reading: agents abstain and say why)
-
-netcoop export-schemas                    # regenerate schemas/ + PROTOCOL.md after editing models.py
-python scenarios/build_dev_fixtures.py    # rebuild the 17 labelled scenarios in scenarios/dev/
-netcoop eval --n 48 --seed 6 7 8 9 10 --noise 0.10   # held-out evaluation -> eval/<run>/summary.md
+python -m venv .venv
 ```
-Each run writes `reports/<incident>.json` (the report-1.0 diagnosis), `reports/<incident>.md` (the same report for humans) and `traces/<incident>.jsonl` (every message, including the QUERY/RESPONSE rounds and the HTTP bodies to and from Connectivity). Statuses: `diagnosed`, `probable`, `healthy`, `insufficient_evidence`, `invalid_input`, `failed`.
 
-### How verification works (QUERY)
-Before deciding, Correlation **verifies** the leading hypothesis (and a close rival) by sending a QUERY to the agent that owns its key measurement (e.g. utilization → Performance, interface errors → Infrastructure).
-- If the scenario has **on-demand probe samples** (`on_query` block, source `on-demand-probe`), the agent *runs the probe*: the RESPONSE cites **new evidence IDs** that did not exist before the QUERY, and Correlation grades severity (critical vs only warn) from them. Those samples grade severity only; the signature checks stay on the 5-minute window.
-- If there is no probe data, the agent **re-reads the window's samples** and says so in the RESPONSE ("no new probe was run"); the DECISION repeats it. Nothing new is claimed.
-- DNS/DHCP faults are not queried: their evidence is Connectivity's own pass/fail service checks, already in hand.
-- Confidence on `correlation_timeout` is `0.0` with method `none: correlation_failed (no heuristic-v1 score could be computed)`: no ranking was possible, and the report says so.
+On Windows, if `python` is not found, use `py -3.12 -m venv .venv`. Activate it with `.venv\Scripts\activate` on Windows or `source .venv/bin/activate` on macOS and Linux, then:
 
-### How a diagnosis is decided
-Agents nominate hypotheses; the **Correlation agent** re-checks each one against its signature in `netcoop/config/signatures-1.0.yaml`, verifies the leader (and a close rival) with a **QUERY** to the agent that owns the key measurement, and scores it with **`heuristic-v1`** (`netcoop/agents/correlation.py` documents every factor). Gates: `diagnosed` needs confidence ≥ 0.70, coverage ≥ 0.75, two independent raw sources, a 0.15 lead **and no unresolved rival** (a hypothesis the agents raised that the evidence can neither confirm nor refute is listed in `alternative_causes` and blocks a diagnosis); `probable` names what is missing; `healthy` needs normal measurements **and** passing service and path checks; otherwise the system abstains with `insufficient_evidence`. Confidence values are documented heuristics, not calibrated probabilities, so the report caps them by status: `diagnosed`/`healthy` at most 0.95 (nothing from one window is certain) and `probable` at most 0.69 (it never outscores a cause that passed the 0.70 gate). The uncapped score stays in the DECISION and the cap is named in `limitations`.
+```bash
+pip install -e ".[dev]"
+```
 
-### What every report tells you
-- `summary`: one plain sentence, e.g. *Probably link congestion on DEPT_UPLINK_01, affecting SW_CAMPUS_2, but not confirmed: interface_fault@DEPT_UPLINK_01 cannot yet be ruled out. Verify before acting.*
-- `supporting_evidence[]`: evidence ID, metric, value, unit, raw source, per-interval delta for counters, and `interpretation` against the configured threshold (*above critical 90 percent*).
-- `validation_errors`: every input message the bus rejected, with its typed code and field (`SCHEMA_VERSION_UNSUPPORTED`, `MISSING_FIELD`, `DUPLICATE_MESSAGE`, ...), and every telemetry item the normalizer skipped (an unknown metric or key, or a record with no usable timestamp, target or metrics). One bad item does not reject the incident: the rest is diagnosed, and only an input with nothing usable left is `invalid_input`. Skipped items, or utilization that looks like a 0–1 fraction, rule out a `healthy` verdict, because the fault could be in the data that was not read. Aliases such as `ping_ms`, `rtt_ms`, `latency_s` and `jitter_s` are mapped (seconds ×1000) and logged.
-- `limitations`: the time window, the confidence cap, any malformed/missing/stale readings that were excluded, and the before/after ranking of each QUERY round.
+```bash
+pytest -q
+```
 
-### Held-out evaluation (Phase 4)
-`netcoop eval` generates incidents from `netcoop/evaluation/heldout.py` (committed before any result was looked at; new seeds, times, topology positions and metric mixes; labels come from the fault the generator overlays, never from the system), runs each one, and publishes every ARCHITECTURE §7 metric. Results, with the pre-registered first run, the bug it found and every non-exact case's trace: [`docs/results/PHASE4_RESULTS.md`](docs/results/PHASE4_RESULTS.md).
+```bash
+netcoop demo
+```
 
-| fresh seeds 6–10, 240 cases | σ 0 | σ 0.05 | σ 0.10 | σ 0.15 |
-|---|---|---|---|---|
-| exact (status + cause) | 100 % | 100 % | 99.2 % | 96.7 % |
-| false diagnosis on healthy / busy-but-healthy / stale (90 cases) | 0 | 0 | 0 | 0 |
-| wrong diagnoses / hedged wrong | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 |
-| abstained (fault classes) | 0 | 0 | 2 | 6 |
+`netcoop demo` runs all 17 labelled scenarios and prints expected against actual. It ends with `17/17 scenarios match their label` and writes `reports/` and `traces/`. It runs Connectivity in-process, so no server is needed.
 
-These numbers come from our own fault model: they show the logic holds across positions, timing and noise, not how it would score on real campus telemetry.
+## Live demonstration
 
-## How it works
-| Component | Role |
+In one terminal, start Connectivity as its own process:
+
+```bash
+uvicorn connectivity_service.app:app --port 8001
+```
+
+In a second terminal, run a fault and its control:
+
+```bash
+netcoop run scenarios/dev/congestion.json
+```
+
+```bash
+netcoop run scenarios/dev/congestion.json --control
+```
+
+Then a case with two competing causes:
+
+```bash
+netcoop run scenarios/dev/ambiguous_congestion_errors.json
+```
+
+Open the dashboard from a third terminal:
+
+```bash
+npm --prefix dashboard ci
+```
+
+```bash
+npm --prefix dashboard run dev
+```
+
+Go to http://localhost:5173 and select an incident. The dashboard reads the real `reports/` and `traces/`, validates each message in the browser against `schemas/`, and shows the diagnosis, competing causes, verification rounds, the message timeline and the control comparison. Reload after new runs.
+
+Without the dashboard, `reports/INC-0103.md` is the readable report and `traces/INC-0103.jsonl` is the full trace. If the server is not running, `netcoop run` warns you and the report degrades to `probable` at most. `--local` runs Connectivity in-process instead.
+
+The untouched organizer output is accepted as is:
+
+```bash
+netcoop run data/generator_raw/hardware_failure_unseeded.json
+```
+
+The generator emits one reading for one device, so the agents abstain and say why.
+
+## Example diagnosis
+
+Output of `scenarios/dev/congestion.json` (`INC-0103`, "Hostel blocks report slow internet in the evening") over real HTTP. The recorded run is in [docs/demo/recorded/](docs/demo/recorded/).
+
+**1. Two agents find evidence independently.**
+
+| Message | Finding |
 |---|---|
-| Normalizer | Converts raw telemetry to canonical observations; keeps original field/value; flags missing, stale, converted data (never turns missing into 0) |
-| Orchestrator + bus | Validates **every** message, drops duplicates, turns every failure into a typed `ERROR`, logs all traffic to SQLite |
-| Performance agent | Latency, jitter, loss, throughput, utilization |
-| Infrastructure agent | CPU/memory, queue drops, interface errors, flaps, Wi-Fi signal/retries; emits supporting **and contradicting** findings |
-| Connectivity agent | Separate REST process; topology, blast radius, DNS/DHCP, reachability; reads peer findings before answering |
-| Correlation agent | Ranks causes, sends QUERY when evidence conflicts, abstains when evidence is thin (`heuristic-v1` confidence) |
-| Reporting agent | Produces the final JSON report using only cited evidence |
+| `INC-0103-PERF-03` (`F-PERF-03`) | `link_congestion@HOSTEL_UPLINK_01` supports: utilization above 90% for 3 consecutive samples, latency p95 274.3 ms, queue-drop counter rose |
+| `INC-0103-INF-02` (`F-INF-02`) | `link_congestion@HOSTEL_UPLINK_01` supports: queue drops on `SW_CAMPUS_1` rose by 2150 while utilization is high |
 
-Statuses: `diagnosed`, `probable`, `healthy`, `insufficient_evidence`, `invalid_input`, `failed`. Only the first two may name a cause.
+**2. Connectivity consumes those findings over HTTP.** The orchestrator POSTs a Bundle holding the TASK and five peer FINDINGs, and gets HTTP 200.
+
+`F-CONN-03` lists `consumed_message_ids: [INC-0103-INF-02, INC-0103-PERF-03]`. From its own reachability checks it concludes a blast radius of 6 devices, all checked devices answering: "a degradation, not an outage". It cites only its own evidence, so one measurement cannot count as two sources.
+
+**3. Correlation verifies.** `Q-01` asks Performance for `link_utilization_pct` on the uplink, and the on-demand probe returns three new samples: 95.8, 96.9, 94.7. The score moves from 0.96 to 1.00.
+
+**4. The report cites actual evidence.** Status `diagnosed`, reported confidence 0.95 (the 1.00 score is capped, and the report says so).
+
+| Evidence | Metric | Value | Interpretation | Source |
+|---|---|---|---|---|
+| `EV-047` | `link_utilization_pct` | 93.4 % | above critical 90 percent | switch-telemetry |
+| `EV-079` | `queue_drops` | 2620 | +610 in one interval, at or above critical 100 | switch-telemetry |
+| `EV-120` | `latency_ms` | 220.2 ms | above critical 200 ms | client-probe |
+
+Affected: `HOSTEL_UPLINK_01`, `SW_CAMPUS_1`. Limitation stated in the report: one 5-minute window, and a heuristic score that is not a probability.
+
+**What the exchange changes.** With `--control`, Connectivity receives no peer findings and `F-CONN-03` does not exist. `topology_fit` falls from 1.0 to 0.5.
+
+| | With peer findings | Control |
+|---|---|---|
+| Peer findings sent to Connectivity | 5 | 0 |
+| Findings built on a peer's message | 1 (`F-CONN-03`) | 0 |
+| `heuristic-v1` score | 1.00 | 0.88 |
+| Status | `diagnosed` | `diagnosed` |
+
+Of the 16 labelled scenarios that parse, the control changes the leading score in 6 and the status in none. The exchange adds scope and raises confidence on these scenarios; it does not rescue a diagnosis that would otherwise fail.
+
+**When evidence conflicts.** In `ambiguous_congestion_errors` (`INC-0108`), congestion and an interface fault both pass their signatures on one uplink. Interface fault leads 0.92 to 0.90.
+
+Q-01 finds the error rate reaches only the warn level, and Q-02 confirms critical utilization, so the ranking **flips** to congestion 0.94 against interface fault 0.91. The 0.03 lead is below the 0.15 gate, so the report says `probable`, names the rival, and recommends ruling it out before acting.
+
+## Evaluation
+
+| Layer | What it is | Result |
+|---|---|---|
+| Unit and integration tests | `pytest -q`, including the Connectivity service over its HTTP interface | 511 pass |
+| Regression scenarios | 17 labelled fixtures in `scenarios/dev/`, available during development | 17/17 |
+| Held-out evaluation | `netcoop eval`: generated cases, 8 classes, 30 per class | Below |
+
+Fresh seeds 6 to 10, 240 cases per noise level. Noise is multiplicative Gaussian on gauges.
+
+| | σ 0 | σ 0.05 | σ 0.10 | σ 0.15 |
+|---|---|---|---|---|
+| Exact (status and cause) | 100 % | 100 % | 99.2 % | 96.7 % |
+| False diagnosis on no-fault classes (90 cases) | 0 | 0 | 0 | 0 |
+| Wrong cause, stated or hedged | 0 | 0 | 0 | 0 |
+| Abstained on a fault class | 0 | 0 | 2 | 6 |
+| Right cause, weaker status | 0 | 0 | 0 | 2 |
+| Affected-device accuracy, evidence-link integrity | 100 % | 100 % | 100 % | 100 % |
+
+Reproduce one column with:
+
+```bash
+netcoop eval --n 48 --seed 6 7 8 9 10 --noise 0.10
+```
+
+**These numbers come from our own fault model.** They show that the logic holds across positions, timing and noise. They do not show how it would score on real campus telemetry or another team's fault model. There are no held-out two-fault incidents, and `hardware_failure` and `device_overload` are covered by tests only.
+
+The first held-out run found a real bug (poller jitter read as a missing sample). That run, the fix, and every non-exact case's trace are in [docs/results/EVALUATION.md](docs/results/EVALUATION.md).
+
+## Technology stack
+
+Python 3.12 · Pydantic · FastAPI and Uvicorn · HTTPX · jsonschema · PyYAML · SQLite event log · pytest · React, Vite and TypeScript · Ajv · GitHub Actions
 
 ## Repository layout
+
 | Path | Contents |
 |---|---|
-| `netcoop/protocol/` | Protocol models (source of truth), schema export, version compatibility, agent cards |
-| `netcoop/normalizer/` | Organizer-generator adapter |
-| `netcoop/orchestrator/` | Message bus and SQLite event log |
-| `netcoop/config/signatures-1.0.yaml` | Versioned thresholds, fault signatures, check vocabulary, decision gates |
-| `connectivity_service/` | Connectivity agent REST service |
-| `scenarios/` | Topology, labeled dev scenarios (`labels.json` is never read at runtime) |
-| `examples/` | One valid message per type, old/new-version samples, report samples |
+| `netcoop/cli.py` | Entry point: `netcoop run`, `demo`, `eval`, `export-schemas` |
+| `netcoop/agents/` | Performance, Infrastructure, Correlation and Reporting |
+| `connectivity_service/` | Connectivity agent, as a FastAPI process |
+| `netcoop/protocol/` | Protocol models (source of truth), version compatibility, agent cards |
+| `netcoop/orchestrator/` | Pipeline, message bus, event log, HTTP client |
+| `netcoop/normalizer/` | Telemetry normalization and the organizer-format adapter |
+| `netcoop/config/signatures-1.0.yaml` | Thresholds, fault signatures, decision gates |
+| `netcoop/evaluation/` | Held-out generator and scoring |
+| `dashboard/` | React dashboard over real runs |
+| `scenarios/` | Topology, labelled fixtures, labels (read only for scoring) |
+| `data/generator_raw/` | Untouched organizer output and field mapping |
+| `examples/` | One valid message of each type, version samples, wire bodies |
+| `schemas/` | Generated JSON Schemas |
+| `tests/` | Test suite |
+| `reports/`, `traces/` | Generated run output (not committed) |
+| `docs/` | [Demo script](docs/DEMO_SCRIPT.md), [evaluation](docs/results/EVALUATION.md), [recorded runs](docs/demo/recorded/), [engineering history](docs/history/) |
 
-## Team workflow
-- One branch per task (`m1/<name>-<topic>`), PR + one review, `pytest -q` green on `main`.
-- Only the protocol lead edits `netcoop/protocol/models.py`; run `netcoop export-schemas` and commit the regenerated files in the same PR.
+## Limitations and future work
 
-## Limitations
-- The organizer generator returns one reading for one device per call, with no topology, repeated samples or fault labels. We use it to prove we ingest the official format untouched; diagnostic accuracy is measured on our own labeled scenarios (`scenarios/`).
-- Thresholds are documented heuristics, not calibrated probabilities.
-- Held-out evaluation uses our own generator (see above and `docs/results/PHASE4_RESULTS.md`); there are no held-out two-fault incidents.
+- **No validation on real telemetry.** Accuracy is measured only on our generator, and thresholds are heuristics from public guidance and judgement.
+- **Confidence is not a probability.** It has not been calibrated against outcomes.
+- **The organizer generator gives one reading per call**, with no topology or labels. We show that the format is ingested, not that the system diagnoses from it.
+- **One telemetry window.** Each run is a batch over five minutes; there is no streaming or incident memory.
+- **Connectivity shares a codebase** with the other agents. It is process-separated, but only one agent runs out of process today.
+- **Fixed topology:** a tree from `scenarios/topology.json`; multi-homed paths are not modelled.
+
+Next steps would be replaying real SNMP and probe captures, calibrating confidence, and moving more agents behind the same HTTP contract. None of these is implemented.
+
+## Team and contributions
+
+Roles below come from the commit history and [task records](docs/history/).
+
+| Member | Git author | Contribution |
+|---|---|---|
+| Sayan Majhi | Sayan Majhi | Protocol, agent base and pipeline, Correlation, Reporting, labelled fixtures, held-out evaluation, dashboard |
+| Gaurav | Gaurav_C19 | Organizer data capture and field mapping, signature thresholds, normalizer, Performance agent |
+| Amit | amit-cmd123 | Topology, message bus, event log, Connectivity REST service and logic, Infrastructure agent |
+
+AI assistants were used during development, for coding and as an independent phase reviewer. The review verdicts are recorded in [docs/history/STATUS.md](docs/history/STATUS.md).

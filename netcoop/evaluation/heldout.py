@@ -1,18 +1,17 @@
-"""Held-out incident generator for Phase 4 (ARCHITECTURE §7, Phase 3 re-review P4-0/P4-3/P4-4).
+"""Held-out incident generator (ARCHITECTURE §7).
 
 Written and committed before any held-out result was looked at. It never imports the agents,
 the decision code or labels.json: every label below follows from the fault the generator itself
-overlays, by the rules stated in LABEL_RULES. Thresholds, weights and gates stay frozen at
-`ed288c2`; nothing here reads signatures-1.0.yaml.
+overlays, by the rules stated in LABEL_RULES. Nothing here reads signatures-1.0.yaml.
 
-Differences from scenarios/dev (P4-4):
+Differences from scenarios/dev:
 - seeds: case i of run seed S uses Random(S * 10_000 + i); dev uses 101-116;
 - time: each case has its own window end on 2026-11-02..09 with an odd second offset (dev: 10:05:00Z on 11-01);
 - positions: congestion on access links (ACC_LINK_03..10), interface faults on links dev never faults
   (ACC_LINK_03..06/08..10, DEPT_UPLINK_01), weak Wi-Fi on DEPT_AP_01, DNS/DHCP clients drawn from all
   access switches, client probes on a random access switch per zone;
 - metric mixes: congestion corroborated by latency only, drops only, or both; interface faults seen through
-  errors only, flaps only, or both; one-source DNS/DHCP + reachability (P4-3); busy-but-healthy links (P4-0);
+  errors only, flaps only, or both; one-source DNS/DHCP + reachability; busy-but-healthy links;
   stale or missing key telemetry.
 """
 from __future__ import annotations

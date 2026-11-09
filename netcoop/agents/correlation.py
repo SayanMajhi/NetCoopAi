@@ -26,17 +26,16 @@ heuristic-v1 (ARCHITECTURE.md §4), every factor in [0, 1]:
   score of a contradicts FINDING aimed at the hypothesis (0.5 when it has no score), else 0.
 
 Gates: diagnosed = all required checks pass, confidence >= 0.70, coverage >= 0.75,
-independent_source_fit == 1 and a lead >= 0.15 over the runner-up; probable = confidence
->= 0.50 with the reason it is not diagnosed named; healthy = no candidate passes all its
+independent_source_fit == 1, a lead >= 0.15 over the runner-up and an answer from Connectivity;
+probable = confidence >= 0.50 with the reason it is not diagnosed named; healthy = no candidate passes all its
 required checks, and fresh normal performance + infrastructure measurements, passing
 service checks and passing path checks, with no missing/stale data; else
 insufficient_evidence.
 """
 from __future__ import annotations
 
-import re
-
 import math
+import re
 from dataclasses import dataclass, field
 from datetime import timedelta
 from statistics import median
@@ -119,7 +118,7 @@ class Candidate:
 
     @property
     def unassessed(self) -> bool:
-        """Not refuted, but too little fresh evidence to judge it (Phase 3 review R1)."""
+        """Not refuted, but too little fresh evidence to judge it."""
         return not self.refuted and self.coverage < 0.75 and any(c.state == "unknown" for c in self.required)
 
     @property
@@ -418,15 +417,21 @@ class CorrelationAgent(BaseAgent):
 
     # ----------------------------------------------------------------- decision
 
-    def decide(self, ctx: IncidentContext, in_reply_to: Optional[str]) -> tuple[Envelope, dict[str, Any]]:
-        """The DECISION message plus what Reporting needs (status, leader, rivals, reasons)."""
+    def decide(self, ctx: IncidentContext, in_reply_to: Optional[str],
+               connectivity_ok: bool = True) -> tuple[Envelope, dict[str, Any]]:
+        """The DECISION message plus what Reporting needs (status, leader, rivals, reasons).
+        Without a Connectivity answer nobody judged scope or paths, so neither `diagnosed` nor `healthy`."""
         ranked = self.ranking()
         leader = ranked[0] if ranked else None
         rival = ranked[1] if len(ranked) > 1 else None
         lead = leader.confidence - (rival.confidence if rival else 0.0) if leader else 0.0
         limitations: list[str] = list(self.history)
         healthy, healthy_conf, healthy_notes = _healthy(ctx, ranked)
-        # R1: a rival the agents raised but the evidence can neither confirm nor refute is unresolved.
+        if not connectivity_ok:
+            healthy = False
+            limitations.append("connectivity_agent did not answer: blast radius and path checks were not analysed, "
+                               "so this run can neither confirm a cause nor call the network healthy")
+        # A rival the agents raised but the evidence can neither confirm nor refute is unresolved.
         unresolved = [c for c in ranked if c is not leader and c.unresolved and c.supporting]
         for c in unresolved:
             senders = ", ".join(sorted({f.sender for f in c.supporting}))
@@ -441,19 +446,20 @@ class CorrelationAgent(BaseAgent):
 
         corroborated = bool(leader) and leader.corroboration_met and not leader.refuted
         if corroborated and leader.required_pass and leader.confidence >= 0.70 and leader.coverage >= 0.75 \
-                and leader.factors["independent_source_fit"] == 1.0 and lead >= CLOSE and not unresolved:
+                and leader.factors["independent_source_fit"] == 1.0 and lead >= CLOSE and not unresolved \
+                and connectivity_ok:
             status = Status.diagnosed
         elif healthy:
             status = Status.healthy
             limitations += healthy_notes
         elif corroborated and leader.confidence >= 0.50:
             status = Status.probable
-            limitations += _not_diagnosed(leader, rival, lead)
+            limitations += _not_diagnosed(leader, rival, lead, connectivity_ok)
         else:
             status = Status.insufficient_evidence
             limitations += healthy_notes
             if leader:
-                limitations += _not_diagnosed(leader, rival, lead)
+                limitations += _not_diagnosed(leader, rival, lead, connectivity_ok)
             else:
                 limitations.append("no fault hypothesis was nominated with evidence; heuristic-v1 confidence 0.0")
         ranking = [RankedCause(hypothesis=c.hypothesis, confidence=c.confidence, coverage=round(c.coverage, 2),
@@ -563,7 +569,7 @@ def sustained_run(samples: list[Observation], critical: float, warn: Optional[fl
 def _sample_interval(samples: list[Observation]) -> float:
     """The polling interval, in seconds (0 if unknown): the median spacing between samples.
     Pollers jitter (45 s, 73 s, 57 s ... for a 60 s poll); the smallest spacing would make an ordinary
-    late sample look like a missing interval (Phase 4 held-out run 1). A real gap is about 2x the median."""
+    late sample look like a missing interval (found by held-out run 1). A real gap is about 2x the median."""
     times = sorted({o.observed_at for o in samples})
     gaps = sorted((b - a).total_seconds() for a, b in zip(times, times[1:]) if b > a)
     if not gaps:
@@ -615,7 +621,7 @@ _GENERIC_WORDS = {"access", "switch", "distribution", "department", "hostel", "b
 
 
 def _area(ctx: IncidentContext) -> tuple[Optional[set[str]], list[str]]:
-    """The part of the network the complaint is about (Phase 2 review P2-2): topology nodes or links it names
+    """The part of the network the complaint is about: topology nodes or links it names
     by ID, zone, or a distinctive label word ("Library", "CSE"), plus their path to the core, what sits behind
     them, and the DNS/DHCP servers. None (the whole network) when the complaint names nothing in the topology."""
     topo = _Topo(ctx.topology)
@@ -686,7 +692,7 @@ def _healthy(ctx: IncidentContext, ranked: list[Candidate]) -> tuple[bool, float
     return ok, round(raw * met, 2), notes
 
 
-def _not_diagnosed(leader: Candidate, rival: Optional[Candidate], lead: float) -> list[str]:
+def _not_diagnosed(leader: Candidate, rival: Optional[Candidate], lead: float, connectivity_ok: bool = True) -> list[str]:
     out = []
     if leader.refuted:
         out.append(f"{leader.hypothesis}: ruled out by a contradicting measurement: "
@@ -704,7 +710,7 @@ def _not_diagnosed(leader: Candidate, rival: Optional[Candidate], lead: float) -
         out.append(f"unresolved rival {rival.hypothesis} within {lead:.2f} of {leader.hypothesis}")
     if leader.confidence < 0.70:
         out.append(f"{leader.hypothesis}: confidence {leader.confidence:.2f} < 0.70")
-    if not out:
+    if not out and connectivity_ok:
         out.append(f"{leader.hypothesis}: not diagnosed while an unassessed rival remains open")
     return out
 

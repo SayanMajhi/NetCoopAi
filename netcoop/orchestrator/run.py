@@ -1,8 +1,9 @@
-"""End-to-end pipeline for one incident (docs/PHASE2_TASKS.md, decision D3).
+"""End-to-end pipeline for one incident.
 
 normalize -> TASK Performance + TASK Infrastructure -> their FINDINGs through the bus
 -> TASK Connectivity as a Bundle with the peer FINDINGs (none with control=True)
--> Connectivity replies through the bus -> (Phase 3: Correlation) -> report + trace.
+-> Connectivity replies through the bus -> Correlation (QUERY rounds, DECISION)
+-> Reporting -> report + trace.
 
 run_incident never raises: bad input gives an invalid_input report, a missing or
 failing component becomes a typed ERROR plus a limitation, and the run still
@@ -84,8 +85,6 @@ def _load(module: str, attr: str, unavailable: list[str], label: str) -> Any:
 
 
 def default_components(connectivity: str = "remote", endpoint: str = DEFAULT_ENDPOINT) -> Components:
-    """Wire the real modules. Owners: normalize.py (B), performance.py (B),
-    infrastructure.py (C), connectivity_service/logic.py + orchestrator/remote.py (C)."""
     unavailable: list[str] = []
     normalize = _load("netcoop.normalizer.normalize", "normalize", unavailable, "normalizer")
     agents: dict[str, BaseAgent] = {}
@@ -175,6 +174,8 @@ def _shape_error(fixture: Any) -> Optional[str]:
     record ({timestamp, device_id, metrics, status}); field-level checks are the normalizer's."""
     if not isinstance(fixture, dict):
         return "scenario must be a JSON object"
+    if not isinstance(fixture.get("messages", []), list):
+        return "'messages' must be a list"
     if "records" in fixture:
         records = fixture["records"]
         return None if isinstance(records, list) and records else "'records' must be a non-empty list"
@@ -248,15 +249,13 @@ def _run_incident(fixture: Any, topology: dict[str, Any], signatures: dict[str, 
         if agent is None:
             continue
         try:
-            outputs = _call_with_deadline(agent, task, ctx)
+            outputs = _call_with_deadline(agent_id, lambda: agent.handle(task, ctx))
+            for out in outputs:
+                run.deliver(out.model_dump(mode="json"))
         except TimeoutError as exc:
             run.failure(agent_id, task.message_id, ErrorCode.AGENT_TIMEOUT, str(exc))
-            continue
         except Exception as exc:
             run.failure(agent_id, task.message_id, ErrorCode.AGENT_FAILURE, f"{type(exc).__name__}: {exc}")
-            continue
-        for out in outputs:
-            run.deliver(out.model_dump(mode="json"))
 
     # 2. Connectivity, out of process, interprets the peer FINDINGs (none in the control run).
     peers = [] if control else [f for f in run.findings if f.sender in (PERFORMANCE, INFRASTRUCTURE)]
@@ -265,21 +264,26 @@ def _run_incident(fixture: Any, topology: dict[str, Any], signatures: dict[str, 
     run.deliver(task.model_dump(mode="json"))
     if control:
         run.limitations.append("control run: Connectivity received no peer findings")
-    if comps.connectivity is not None:  # if None, comps.unavailable already says why
+    connectivity_ok = comps.connectivity is not None    # if None, comps.unavailable already says why
+    if comps.connectivity is not None:
         bundle = Bundle(messages=[task, *peers], observations=norm.observations, topology=topology)
         reply = comps.connectivity(bundle)
         run.wire.append(_wire_record(reply))
         if reply.error:
-            run.failure(CONNECTIVITY, task.message_id, _error_code(reply.error), reply.error)
-        for raw in reply.messages:
-            run.deliver(raw)
+            connectivity_ok = False
+            code = _error_code(reply.error)
+            run.failure(CONNECTIVITY, task.message_id, code, reply.error.removeprefix(f"{code.value}: "))
+        delivered = [m for raw in reply.messages if (m := run.deliver(raw)) is not None]
+        if connectivity_ok and not delivered:
+            connectivity_ok = False
+            run.failure(CONNECTIVITY, task.message_id, ErrorCode.AGENT_FAILURE, "reply held no valid message")
 
     # 3. Correlation ranks the signatures, verifies with QUERY (<= 2 rounds) and decides; one retry.
     simulate = (fixture.get("inject") or {}).get("correlation") if isinstance(fixture.get("inject"), dict) else None
     info: Optional[dict[str, Any]] = None
     for attempt in (1, 2):
         try:
-            info = _correlate(run, ctx, comps, simulate)
+            info = _correlate(run, ctx, comps, simulate, connectivity_ok)
             break
         except TimeoutError as exc:
             failure = (ErrorCode.AGENT_TIMEOUT, f"attempt {attempt}: {exc}")
@@ -292,36 +296,43 @@ def _run_incident(fixture: Any, topology: dict[str, Any], signatures: dict[str, 
         report = _fallback(run, version, log)
     else:
         ctx.normalization_log = log
-        report = ReportingAgent().build(ctx, info, run.findings, version, run.limitations, _rejections(run))
+        try:
+            report = ReportingAgent().build(ctx, info, run.findings, version, run.limitations, _rejections(run))
+        except Exception as exc:  # a reporting bug must still produce a report, and keep the trace
+            detail = f"reporting failed: {type(exc).__name__}: {exc}"
+            report = _terminal(incident_id, Status.failed, version, limitations=[detail, *run.limitations],
+                               normalization_log=log).report
     return RunResult(report=report, messages=run.messages, wire=run.wire, findings=run.findings)
 
 
-def _call_with_deadline(agent: BaseAgent, task: Envelope, ctx: IncidentContext,
-                        deadline_s: float = AGENT_DEADLINE_S) -> list[Envelope]:
-    """Run agent.handle on a daemon thread; a hung agent cannot stall the incident."""
+def _call_with_deadline(agent_id: str, call: Callable[[], Any]) -> Any:
+    """Run an agent call on a daemon thread; a hung agent cannot stall the incident."""
     box: dict[str, Any] = {}
 
     def target() -> None:
         try:
-            box["out"] = agent.handle(task, ctx)
+            box["out"] = call()
         except Exception as exc:
             box["exc"] = exc
 
     worker = threading.Thread(target=target, daemon=True)
     worker.start()
-    worker.join(deadline_s)
+    worker.join(AGENT_DEADLINE_S)
     if worker.is_alive():
-        raise TimeoutError(f"{agent.agent_id} did not answer within {deadline_s:g}s")
+        raise TimeoutError(f"{agent_id} did not answer within {AGENT_DEADLINE_S:g}s")
     if "exc" in box:
         raise box["exc"]
     return box["out"]
 
 
-def _correlate(run: _Run, ctx: IncidentContext, comps: Components, simulate: Optional[str]) -> dict[str, Any]:
+def _correlate(run: _Run, ctx: IncidentContext, comps: Components, simulate: Optional[str],
+               connectivity_ok: bool) -> dict[str, Any]:
     """Rank, run the QUERY rounds through the bus, and deliver the DECISION."""
     if simulate == "timeout":           # test hook from scenarios/dev/correlation_timeout.json
         raise TimeoutError("correlation_agent did not answer within its deadline (simulated)")
     corr = CorrelationAgent()
+    # A retry must not reuse the failed attempt's message IDs: the bus would reject them as duplicates.
+    corr._seq = sum(1 for m in run.messages if m.sender == CORRELATION)
     corr.rank(ctx, run.findings)
     while True:
         queries = corr.plan_queries(ctx)
@@ -334,10 +345,18 @@ def _correlate(run: _Run, ctx: IncidentContext, comps: Components, simulate: Opt
             if agent is None:
                 run.limitations.append(f"QUERY {query.payload['query_id']}: {query.recipient} unavailable")
                 continue
-            response = run.deliver(agent.answer(query, ctx).model_dump(mode="json"))
+            try:
+                answer = _call_with_deadline(query.recipient, lambda: agent.answer(query, ctx))
+            except TimeoutError as exc:  # the check stays unverified; the decision still ships
+                run.failure(query.recipient, query.message_id, ErrorCode.AGENT_TIMEOUT, str(exc))
+                continue
+            except Exception as exc:
+                run.failure(query.recipient, query.message_id, ErrorCode.AGENT_FAILURE, f"{type(exc).__name__}: {exc}")
+                continue
+            response = run.deliver(answer.model_dump(mode="json"))
             if response is not None:
                 corr.absorb(response, ctx, run.findings)
-    decision, info = corr.decide(ctx, None)
+    decision, info = corr.decide(ctx, None, connectivity_ok=connectivity_ok)
     run.deliver(decision.model_dump(mode="json"))
     return info
 
@@ -366,7 +385,7 @@ def _task(orch: _Orchestrator, ctx: IncidentContext, recipient: str, capability:
 
 
 def _fallback(run: _Run, version: str, normalization_log: list[str]) -> Report:
-    """Report when Correlation failed twice (ARCHITECTURE §4 step 5): insufficient_evidence."""
+    """Report when Correlation failed twice (ARCHITECTURE §6): insufficient_evidence."""
     finding_ids = sorted(f.payload["finding_id"] for f in run.findings)
     sources = sorted({f.sender for f in run.findings})
     return Report(

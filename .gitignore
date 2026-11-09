@@ -1,27 +1,35 @@
+# secrets and machine-specific settings
 .env
-__pycache__/
-*.pyc
-.venv/
-venv/
+.env.*
 .idea/
 .vscode/
+.claude/
+.DS_Store
+Thumbs.db
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 *.egg-info/
 build/
 dist/
 
-# generated run outputs (keep the folders and curated examples)
+# generated run outputs (recorded demo runs live in docs/demo/recorded/)
 traces/*
 !traces/.gitkeep
 reports/*
-!reports/examples/
+!reports/.gitkeep
+eval/
+eval-remote/
 *.sqlite
+*.sqlite-journal
+*.log
 
 # dashboard
 node_modules/
 dashboard/dist/
-
-# local Claude Code settings
-.claude/
-eval/
-eval-remote/

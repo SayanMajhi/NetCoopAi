@@ -5,7 +5,8 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "netcoop"
 version = "0.1.0"
-requires-python = ">=3.10"
+description = "Multi-agent campus network fault diagnosis over a versioned, validated protocol"
+requires-python = ">=3.12"
 dependencies = [
   "pydantic>=2.6",
   "fastapi>=0.110",
@@ -14,7 +15,6 @@ dependencies = [
   "jsonschema>=4.21",
   "rfc3339-validator>=0.1.4",  # makes jsonschema check format: date-time
   "pyyaml>=6.0",
-  "python-dotenv>=1.0",
 ]
 
 [project.optional-dependencies]

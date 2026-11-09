@@ -1,4 +1,4 @@
-"""Phase 4 P4-1 (per-interval deltas next to cumulative counters) and P4-2 (healthy gate's
+"""Per-interval deltas next to cumulative counters, and the healthy gate's
 missing/stale rule scoped to the area in question). No threshold, weight or gate value changes."""
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ def run(fx: dict) -> Report:
     return run_incident(fx, TOPOLOGY, SIGNATURES, components=default_components(connectivity="local")).report
 
 
-# ---------------------------------------------------------------- P4-1
+# ---------------------------------------------------------------- per-interval deltas
 
 
 def test_counter_evidence_carries_the_per_interval_delta():
@@ -60,7 +60,7 @@ def test_report_with_deltas_still_validates_against_the_schema():
     jsonschema.validate(run(fixture("congestion")).model_dump(mode="json"), schema)
 
 
-# ---------------------------------------------------------------- P4-2
+# ---------------------------------------------------------------- healthy gate scope
 
 
 def with_stale(fx: dict, device: str) -> dict:

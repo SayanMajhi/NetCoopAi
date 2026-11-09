@@ -1,4 +1,4 @@
-"""P4-4: the held-out generator itself (structure only; no decision code runs here)."""
+"""The held-out generator itself (structure only; no decision code runs here)."""
 from __future__ import annotations
 
 import json

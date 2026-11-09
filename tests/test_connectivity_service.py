@@ -84,7 +84,7 @@ def test_valid_bundle_gets_the_connectivity_analysis(client):
     assert reply["in_reply_to"] == "INC-0001-ORCH-03" and reply["recipient"] == "correlation_agent"
     assert reply["message_id"] == "INC-0001-CONN-01"
     assert reply["timestamp"] == TASK["timestamp"]           # incident clock, not wall clock
-    assert reply["payload"]["hypothesis"] == "link_congestion@HOSTEL_UPLINK_01"     # scope, not a relabel (R2)
+    assert reply["payload"]["hypothesis"] == "link_congestion@HOSTEL_UPLINK_01"     # scope, not a relabel
     assert reply["payload"]["consumed_message_ids"] == ["INC-0001-INF-02"]
     assert reply["payload"]["evidence_ids"] == ["EV-015"]                            # its own check, not EV-014
 
@@ -228,7 +228,7 @@ def test_analysis_crash_is_typed_agent_failure(client, monkeypatch):
     assert error["in_reply_to"] == "INC-0001-ORCH-03"
 
 
-# --------------------------------------------------------------------------- Phase 2 review (R3)
+# --------------------------------------------------------------------------- typed models behind the JSON Schema
 
 
 def test_trailing_newline_peer_is_rejected_as_input_not_agent_failure(client):

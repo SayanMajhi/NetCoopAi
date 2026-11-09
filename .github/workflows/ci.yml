@@ -10,6 +10,8 @@ jobs:
           python-version: "3.12"
       - run: pip install -e ".[dev]"
       - run: pytest -q
+      - name: Every labelled scenario matches its label
+        run: netcoop demo
 
   dashboard:
     runs-on: ubuntu-latest

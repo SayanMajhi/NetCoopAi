@@ -1,4 +1,4 @@
-"""Phase 4 held-out run 1 finding: poller jitter must not read as a missing interval.
+"""Held-out run 1 finding: poller jitter must not read as a missing interval.
 
 Case INC-H3-034 (seed 30034): five utilization samples, all above 90 %, 45-73 s apart. The interval
 was taken as the smallest spacing (45 s), so the 73 s spacing (> 1.5 x 45) broke the sustained run.

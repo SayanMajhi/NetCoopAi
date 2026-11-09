@@ -158,7 +158,7 @@ def test_deterministic_ids() -> None:
     assert [p["finding_id"] for p in run(spec)] == ["F-INF-01", "F-INF-02"]
 
 
-# --------------------------------------------------------------------------- Phase 2 review (R4, C7)
+# --------------------------------------------------------------------------- realistic counter growth and weak Wi-Fi evidence
 
 def test_errors_without_downstream_loss_are_not_a_fault() -> None:
     """Rising errors alone are background noise; the signature also needs downstream loss."""

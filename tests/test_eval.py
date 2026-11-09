@@ -1,4 +1,4 @@
-"""Phase 4 P4-5: `netcoop eval` scores and publishes every ARCHITECTURE §7 metric."""
+"""`netcoop eval` scores and publishes every ARCHITECTURE §7 metric."""
 from __future__ import annotations
 
 import json

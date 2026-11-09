@@ -2,7 +2,7 @@
 
 A transport takes the request Bundle and returns a ConnectivityReply. The remote
 transport (netcoop/orchestrator/remote.py) posts it over HTTP; the local one calls
-connectivity_service.logic in-process (tests only). Both keep the raw request and
+connectivity_service.logic in-process (--local, tests). Both keep the raw request and
 response bodies so the trace proves what crossed the wire.
 """
 from __future__ import annotations

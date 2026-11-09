@@ -1,6 +1,6 @@
-"""Phase 3 re-review P4-0: a busy but unimpaired link is not congestion.
+"""A busy but unimpaired link is not congestion.
 
-AI 3's reproduction: scenarios/dev/normal.json with only HOSTEL_UPLINK_01 changed. Latency stays normal
+Reproduction: scenarios/dev/normal.json with only HOSTEL_UPLINK_01 changed. Latency stays normal
 and queue drops keep the fixture's background growth (+5 per interval, below queue_drops.warn = 10).
 High utilization alone must not reach `diagnosed` or `probable`: ARCHITECTURE section 3 requires
 queue-drop or latency corroboration. No threshold, weight or gate value is changed for this.
@@ -58,7 +58,7 @@ def test_busy_link_is_not_named_a_fault(utilization, flat):
 
 
 def _over_nominating(ctx, scope, minutes):
-    """The pre-P4-0a rule: any increase counts. Used to prove Correlation's gate (P4-0b) holds on its own."""
+    """The earlier rule: any increase counts. Used to prove Correlation's gate holds on its own."""
     from netcoop.agents.performance import _fresh
     samples = sorted((o for o in ctx.by_metric("queue_drops") if (o.device_id or o.link_id) in scope),
                      key=lambda o: (o.observed_at, o.evidence_id))

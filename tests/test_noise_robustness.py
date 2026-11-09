@@ -1,6 +1,6 @@
-"""Phase 3 review R3: the decision logic must not overclaim on slightly imperfect data.
+"""The decision logic must not overclaim on slightly imperfect data.
 
-AI 3's exact noise function (multiplicative Gaussian on gauges, ±2 dB-scale on RSSI,
+The reviewer-specified noise function (multiplicative Gaussian on gauges, ±2 dB-scale on RSSI,
 counters untouched) on the 10 core scenarios, seeds 1-10, at sigma 0.05 and 0.10.
 We additionally perturb the `on_query` probe samples, so a clean probe cannot hide noise.
 Failures are to be fixed through decision logic, never by moving thresholds, weights or gates.
@@ -29,7 +29,7 @@ GAUGE = {"latency_ms", "jitter_ms", "packet_loss_pct", "throughput_mbps", "cpu_u
 
 
 def noisy(fx: dict, sigma: float, seed: int) -> dict:
-    """AI 3's function (feedback3.md R3), applied to `records` and, in addition, to `on_query`."""
+    """The reviewer-specified noise, applied to `records` and, in addition, to `on_query`."""
     rng = random.Random(seed)
     x = copy.deepcopy(fx)
     for r in x["records"] + x.get("on_query", []):
@@ -82,7 +82,7 @@ def test_no_overclaim_under_noise(sigma: float) -> None:
     assert false_faults == [], false_faults                     # never a fault on a healthy network
     assert wrong_diagnosed == [], wrong_diagnosed               # a wrong cause is never *diagnosed*
     if sigma == 0.05:
-        assert wrong == [], wrong                               # AI 3's bar at 5 %: no wrong cause at all
+        assert wrong == [], wrong                               # required at 5 %: no wrong cause at all
     for name, seed, status, hypothesis, alternatives in wrong:  # at 10 %: only a hedged answer is tolerated
         label_cause = LABELS[f"{name}.json"]["cause"]
         assert status == "probable" and any(a.startswith(f"{label_cause}@") for a in alternatives), (name, seed)

@@ -38,10 +38,10 @@ from fastapi.responses import JSONResponse
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError, best_match
 
-from connectivity_service.logic import handle_bundle
-from netcoop.orchestrator.eventlog import EventLog
 from pydantic import ValidationError as ModelError
 
+from connectivity_service.logic import handle_bundle
+from netcoop.orchestrator.eventlog import EventLog
 from netcoop.protocol.models import PAYLOAD_MODELS, Envelope, Observation
 
 AGENT_ID = "connectivity_agent"
