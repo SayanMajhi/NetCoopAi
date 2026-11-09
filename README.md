@@ -1,8 +1,29 @@
+<div align="center">
+
+<img src=".github/assets/banner.svg" alt="NetCoop AI: five specialist agents connected through a validated message bus" width="100%" />
+
 # NetCoop AI
+
+**Collaborative network fault diagnosis with evidence you can inspect.**
+
+[![CI](https://github.com/SayanMajhi/NetCoopAi/actions/workflows/ci.yml/badge.svg)](https://github.com/SayanMajhi/NetCoopAi/actions/workflows/ci.yml)
+![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-3776AB?style=flat-square&logo=python&logoColor=white)
+![React](https://img.shields.io/badge/React-19-149ECA?style=flat-square&logo=react&logoColor=white)
+[![Protocol netcoop/1.0](https://img.shields.io/badge/Protocol-netcoop%2F1.0-0F766E?style=flat-square)](PROTOCOL.md)
+
+[Quick start](#quick-start) · [Architecture](#architecture) · [Live demo](#live-demonstration) · [Evaluation](#evaluation) · [File structure](#repository-layout)
+
+</div>
+
+---
 
 Five specialist agents exchange validated evidence over a versioned protocol, verify each other's conclusions, and publish one explainable diagnosis of a campus network fault, or say plainly that the evidence is not enough.
 
 Built for the [NetCoop AI problem statement](docs/problem_statement.pdf). Agents are deterministic and rule-based. All telemetry is synthetic, and nothing touches a real network.
+
+| Inspect the evidence | Follow the collaboration | Know when to abstain |
+|---|---|---|
+| Every diagnosis links back to telemetry, sources and explicit checks. | Trace typed messages and the Connectivity agent's HTTP exchange. | Missing data and unresolved rivals appear in the final report. |
 
 ## Problem
 

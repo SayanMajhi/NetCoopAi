@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" fill="none" role="img" aria-labelledby="title description">
+  <title id="title">NetCoop AI: evidence-based network diagnosis</title>
+  <desc id="description">Five specialist agents connect through a validated message bus to produce one explainable network diagnosis.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1200" y2="360" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0B1425"/>
+      <stop offset="1" stop-color="#142E46"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="60" y1="0" x2="460" y2="0" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5EEAD4"/>
+      <stop offset="1" stop-color="#7DD3FC"/>
+    </linearGradient>
+    <pattern id="grid" width="36" height="36" patternUnits="userSpaceOnUse">
+      <path d="M36 0H0V36" stroke="#A5CBE5" stroke-opacity="0.06"/>
+    </pattern>
+  </defs>
+  <rect width="1200" height="360" rx="20" fill="url(#background)"/>
+  <rect width="1200" height="360" rx="20" fill="url(#grid)"/>
+  <rect x="60" y="58" width="40" height="4" rx="2" fill="url(#accent)"/>
+  <g font-family="Segoe UI, Arial, sans-serif">
+    <text x="60" y="99" fill="#7DD3FC" font-size="13" font-weight="600" letter-spacing="3">MULTI-AGENT NETWORK DIAGNOSIS</text>
+    <text x="56" y="177" fill="#F1F5F9" font-size="66" font-weight="700" letter-spacing="-2">NetCoop AI</text>
+    <text x="60" y="219" fill="#CBD5E1" font-size="21">Five specialists. One explainable diagnosis.</text>
+    <text x="60" y="253" fill="#94A3B8" font-size="16">Structured evidence, verified findings and explicit uncertainty.</text>
+    <rect x="60" y="284" width="115" height="28" rx="14" fill="#5EEAD4" fill-opacity="0.1" stroke="#5EEAD4" stroke-opacity="0.3"/>
+    <circle cx="76" cy="298" r="3" fill="#5EEAD4"/>
+    <text x="88" y="303" fill="#99F6E4" font-size="12" font-weight="600">netcoop/1.0</text>
+    <text x="191" y="303" fill="#94A3B8" font-size="12">Synthetic telemetry · Deterministic agents</text>
+    <g stroke="#4C7A96" stroke-width="2">
+      <path d="M842 176L744 87M858 171L955 65M878 182L1054 162M871 201L1004 285M846 207L816 282"/>
+    </g>
+    <g fill="#13283C" stroke="#38617C">
+      <rect x="663" y="49" width="164" height="57" rx="12"/>
+      <rect x="882" y="33" width="168" height="57" rx="12"/>
+      <rect x="1000" y="136" width="162" height="57" rx="12"/>
+      <rect x="941" y="265" width="164" height="57" rx="12"/>
+      <rect x="732" y="271" width="158" height="57" rx="12"/>
+    </g>
+    <g fill="#E2E8F0" font-size="15" font-weight="600" text-anchor="middle">
+      <text x="745" y="83">Performance</text>
+      <text x="966" y="67">Infrastructure</text>
+      <text x="1081" y="170">Connectivity</text>
+      <text x="1023" y="299">Correlation</text>
+      <text x="811" y="305">Reporting</text>
+    </g>
+    <circle cx="857" cy="188" r="43" fill="#5EEAD4" fill-opacity="0.07" stroke="#5EEAD4" stroke-opacity="0.2"/>
+    <circle cx="857" cy="188" r="31" fill="#153B48" stroke="#5EEAD4" stroke-width="2"/>
+    <path d="M845 188L853 196L870 179" stroke="#99F6E4" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="857" y="245" fill="#94A3B8" font-size="12" text-anchor="middle">VALIDATED MESSAGE BUS</text>
+  </g>
+</svg>
